@@ -34,6 +34,8 @@ function safeQrPayload_(id) {
 }
 
 function receivePack_(input, operationKey) {
+  // Do not create a pack that cannot receive a stable QR deeplink.
+  validateAppBaseUrl_(configValue_('APP_BASE_URL'));
   const data = {
     Surovina_ID: requiredText_(input && input.surovinaId, 'Surovina', 100),
     Lot: requiredText_(input && input.lot, 'Lot', 100),
@@ -46,8 +48,6 @@ function receivePack_(input, operationKey) {
   const material = findRecord_('DB_SUROVINY', 'Surovina_ID', data.Surovina_ID);
   if (!material || !boolValue_(material.Aktivni)) throw appError_('Surovina neexistuje nebo není aktivní.', 'VALIDATION_ERROR');
   return withOperation_('PRIJEM_PACKU', operationKey, data, function(ctx) {
-    const yy = Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, 'yy');
-    const counter = findRecordByYear_('PACK', Number(yy));
     const packId = reservePackIdLocked_();
     const now = new Date();
     const pack = {
@@ -98,6 +98,30 @@ function movePack_(packId, input, operationKey, actor) {
   });
 }
 
+function planPackForProduction_(packId, planId, operationKey) {
+  const id = validatePackId_(packId);
+  const plan = requiredText_(planId, 'Plan_Vyroby_ID', 100);
+  return withOperation_('NAPLANOVANI_POUZITI_PACKU', operationKey, { packId:id, planId:plan }, function(ctx) {
+    const pack = findRecord_('SKLAD_SUROVIN', 'Pack_ID', id);
+    if (!pack) throw appError_('Pack nebyl nalezen.', 'NOT_FOUND');
+    if (pack.Stav_Packu === 'VYPRAZDNENY') throw appError_('Vyprázdněný pack nelze naplánovat k použití.', 'VALIDATION_ERROR');
+    const productionPlan = findRecord_('PLAN_VYROBY', 'Plan_Vyroby_ID', plan);
+    if (!productionPlan || ['DOKONCENO','ZRUSENO'].indexOf(productionPlan.Stav) >= 0) throw appError_('Výrobní plán neexistuje nebo je uzavřen.', 'VALIDATION_ERROR');
+    const already = records_('PLAN_VYROBY_SUROVINY').find(function(row) {
+      return row.Plan_Vyroby_ID === plan && row.Pack_ID === id && row.Stav_Pouziti !== 'NEPOUZITO';
+    });
+    if (already) throw appError_('Pack už je v tomto plánu naplánován nebo použit.', 'VALIDATION_ERROR');
+    const itemId = uuid_();
+    appendRecord_('PLAN_VYROBY_SUROVINY', {
+      Plan_Polozka_ID:itemId, Plan_Vyroby_ID:plan, Pack_ID:id,
+      Role:productionPlan.Vstupni_Typ === 'RECEPTURA' ? 'SLOZKA_RECEPTURY' : 'VSTUP_PRIMY',
+      Stav_Pouziti:'PLANOVANO', Pouzito_At:'', Operator:ctx.actor.email,
+      Poznamka:'Pouze plánované přiřazení. Stav packu se nemění až do potvrzení skutečného použití.'
+    });
+    return { entityId:id, data:{ packId:id, planId:plan, itemId:itemId, status:'PLANOVANO' } };
+  });
+}
+
 function markPackUsed_(packId, planId, operationKey) {
   const id = validatePackId_(packId);
   const plan = requiredText_(planId, 'Plan_Vyroby_ID', 100);
@@ -107,15 +131,20 @@ function markPackUsed_(packId, planId, operationKey) {
     if (pack.Stav_Packu === 'VYPRAZDNENY') throw appError_('Vyprázdněný pack nelze použít.', 'VALIDATION_ERROR');
     const productionPlan = findRecord_('PLAN_VYROBY', 'Plan_Vyroby_ID', plan);
     if (!productionPlan || ['DOKONCENO','ZRUSENO'].indexOf(productionPlan.Stav) >= 0) throw appError_('Výrobní plán neexistuje nebo je uzavřen.', 'VALIDATION_ERROR');
-    const existing = records_('PLAN_VYROBY_SUROVINY').find(function(row) { return row.Plan_Vyroby_ID === plan && row.Pack_ID === id && row.Stav_Pouziti === 'POUZITO'; });
-    if (existing) throw appError_('Pack už je do tohoto plánu potvrzen jako použitý.', 'VALIDATION_ERROR');
+    const planned = records_('PLAN_VYROBY_SUROVINY').find(function(row) {
+      return row.Plan_Vyroby_ID === plan && row.Pack_ID === id && row.Stav_Pouziti === 'PLANOVANO';
+    });
+    if (!planned) throw appError_('Pack musí být nejprve přiřazen do plánu. Plánování samo pack neotevírá.', 'VALIDATION_ERROR');
     const now = new Date();
-    appendRecord_('PLAN_VYROBY_SUROVINY', { Plan_Polozka_ID:uuid_(), Plan_Vyroby_ID:plan, Pack_ID:id, Role:productionPlan.Vstupni_Typ === 'RECEPTURA' ? 'SLOZKA_RECEPTURY' : 'VSTUP_PRIMY', Stav_Pouziti:'POUZITO', Pouzito_At:now, Operator:ctx.actor.email, Poznamka:'Obsluha potvrdila fyzickou dostupnost materiálu; žádná spotřebovaná hmotnost se nepočítá.' });
+    updateRecord_('PLAN_VYROBY_SUROVINY', 'Plan_Polozka_ID', planned.Plan_Polozka_ID, {
+      Stav_Pouziti:'POUZITO', Pouzito_At:now, Operator:ctx.actor.email,
+      Poznamka:'Obsluha potvrdila fyzickou dostupnost. Spotřebovaná hmotnost se neeviduje.'
+    });
     if (pack.Stav_Packu === 'NOVY') {
       updateRecord_('SKLAD_SUROVIN', 'Pack_ID', id, { Stav_Packu:'OTEVRENY', Opened_At:now, Updated_At:now, Updated_By:ctx.actor.email });
       logMovement_({ type:'PACK', id:id, action:'OTEVRENI_PACKU', fromBox:pack.Box_Number, fromPosition:pack.Pozice, toBox:pack.Box_Number, toPosition:pack.Pozice, referenceType:'PLAN_VYROBY', referenceId:plan, operationId:ctx.operationId, user:ctx.actor.email });
     }
-    logMovement_({ type:'PACK', id:id, action:'POUZITI_PACKU', referenceType:'PLAN_VYROBY', referenceId:plan, operationId:ctx.operationId, user:ctx.actor.email, note:'Bez hmotnostní bilance.' });
+    logMovement_({ type:'PACK', id:id, action:'POUZITI_PACKU', referenceType:'PLAN_VYROBY', referenceId:plan, operationId:ctx.operationId, user:ctx.actor.email, note:'Potvrzeno obsluhou; bez hmotnostní bilance.' });
     return { entityId:id, data:{ packId:id, planId:plan, opened:pack.Stav_Packu === 'NOVY' } };
   });
 }
