@@ -498,12 +498,24 @@
 
   app.addEventListener('submit', async function (event) {
     const form = event.target;
-    if (!form || !form.id) return;
+    if (!form) return;
+    const special = ['inline-finish','packaging-complete-form','labeling-complete-form'].some(function(name){return form.classList.contains(name);});
+    if (!form.id && !special) return;
     event.preventDefault();
     if (pending) return;
     const fd = new FormData(form);
-    const val = function(name) { return String(fd.get(name) || '').trim(); };
+    const val = function(name) { return String(fd.get(name) == null ? '' : fd.get(name)).trim(); };
     const button = form.querySelector('button[type="submit"]');
+    const listMaterialRows = function(selector, quantityName, plannedName) {
+      return Array.prototype.slice.call(form.querySelectorAll(selector)).map(function(line) {
+        return {
+          stockId:line.querySelector('[name="stockId"]') ? line.querySelector('[name="stockId"]').value : '',
+          plannedQuantity:line.querySelector('[name="'+(plannedName||'plannedQuantity')+'"]') ? line.querySelector('[name="'+(plannedName||'plannedQuantity')+'"]').value : '',
+          lineId:line.querySelector('[data-line-id]') ? line.querySelector('[data-line-id]').getAttribute('data-line-id') : '',
+          quantity:line.querySelector('[name="'+(quantityName||'materialQuantity')+'"]') ? line.querySelector('[name="'+(quantityName||'materialQuantity')+'"]').value : ''
+        };
+      });
+    };
     try {
       pending = true; if (button) button.disabled = true;
       if (form.id === 'receive-form') {
@@ -527,18 +539,81 @@
         const method = intent === 'plan' ? 'apiPlanPackForProduction' : 'apiMarkPackUsed';
         const result = await callApi(method,id,val('planId'),opKey());
         toast(result.duplicate ? 'Požadavek už byl zpracován.' : (intent === 'plan' ? 'Pack přiřazen do plánu; stav se nezměnil.' : 'Použití packu bylo potvrzeno.'),'success');
-        await renderPackDetail(id);
+        await refreshWorkspace();
       } else if (form.id === 'settings-form') {
-        const url = val('url');
-        const format = val('format');
-        const camera = val('camera');
-        if (url) await callApi('apiUpdateConfig',{key:'APP_BASE_URL',value:url});
-        await callApi('apiUpdateConfig',{key:'QR_LABEL_FORMAT_DEFAULT',value:format});
-        await callApi('apiUpdateConfig',{key:'QR_ENABLE_CAMERA_SCANNER',value:camera});
-        const refreshed = await callApi('apiBootstrap');
-        boot.qr = refreshed.qr;
+        const url = val('url'), format = val('format'), camera = val('camera');
+        if (url) await callApi('apiUpdateConfig',{key:'APP_BASE_URL',value:url},opKey());
+        await callApi('apiUpdateConfig',{key:'QR_LABEL_FORMAT_DEFAULT',value:format},opKey());
+        await callApi('apiUpdateConfig',{key:'QR_ENABLE_CAMERA_SCANNER',value:camera},opKey());
         toast('Nastavení uloženo. Nová URL se použije pro nové QR štítky.','success');
-        renderShell();
+        await refreshWorkspace();
+      } else if (form.id === 'ingredient-form') {
+        const result=await callApi('apiCreateSurovina',{name:val('name')},opKey());
+        toast(result.duplicate?'Založení už bylo zpracováno.':'Surovina byla přidána.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'product-form') {
+        const productForm=val('form');
+        const result=await callApi('apiCreateProduct',{name:val('name'),form:productForm,inputType:val('inputType'),capsulesPerPackage:val('capsulesPerPackage'),labelRequired:form.querySelector('[name="labelRequired"]').checked},opKey());
+        toast(result.duplicate?'Založení už bylo zpracováno.':'Produkt byl přidán.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'material-form') {
+        await callApi('apiCreatePackagingMaterial',{name:val('name'),type:val('type'),unit:val('unit')},opKey());
+        toast('Obalový materiál byl přidán.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'material-stock-form') {
+        await callApi('apiReceivePackagingMaterialStock',{materialId:val('materialId'),lot:val('lot'),quantity:val('quantity'),box:val('box'),position:val('position')},opKey());
+        toast('Skladová zásoba obalového materiálu byla přijata.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'recipe-form') {
+        const selected=Array.prototype.slice.call(form.querySelectorAll('[name="ingredientIds"] option:checked')).map(function(option){return option.value;});
+        await callApi('apiCreateRecipeVersion',{name:val('name'),outputForm:val('outputForm'),ingredientIds:selected,note:val('note')},opKey());
+        toast('Neměnná verze receptury byla vytvořena.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'production-plan-form') {
+        const productSelect=form.querySelector('[name="productId"]');
+        const selectedProduct=productSelect.options[productSelect.selectedIndex];
+        const inputType=selectedProduct ? selectedProduct.getAttribute('data-input-type') : '';
+        const formType=selectedProduct ? selectedProduct.getAttribute('data-form') : '';
+        if(inputType==='RECEPTURA'&&!val('recipeId'))throw new Error('Pro recepturový produkt vyberte verzi receptury.');
+        if(formType==='KAPSLE'&&!val('plannedCapsules'))throw new Error('Pro kapslový produkt zadejte plánovaný počet kapslí.');
+        await callApi('apiCreateProductionPlan',{productId:val('productId'),inputType:inputType,recipeId:val('recipeId'),lot:val('lot'),date:val('date'),priority:val('priority'),plannedCapsules:val('plannedCapsules'),note:val('note')},opKey());
+        toast('Výrobní plán byl založen. Skladové packy nebyly otevřeny.','success');
+        await refreshWorkspace();
+      } else if (form.classList.contains('inline-finish')) {
+        const planId=form.getAttribute('data-plan-id');
+        await callApi('apiCompleteProductionPlan',{planId:planId,box:val('box'),position:val('position'),actualCapsules:val('actualCapsules')},opKey());
+        toast('Výrobní plán dokončen a polotovar byl zaevidován.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'packaging-plan-form') {
+        const lines=Array.prototype.slice.call(form.querySelectorAll('.material-line')).map(function(line){return {stockId:line.querySelector('[name="stockId"]').value,plannedQuantity:line.querySelector('[name="plannedQuantity"]').value};});
+        await callApi('apiCreatePackagingPlan',{productId:val('productId'),sourceType:val('sourceType'),sourceId:val('sourceId'),plannedCount:val('plannedCount'),box:val('box'),position:val('position'),materials:lines,note:val('note')},opKey());
+        toast('Plán balení byl vytvořen. Materiál se odečte až při dokončení.','success');
+        await refreshWorkspace();
+      } else if (form.classList.contains('packaging-complete-form')) {
+        const id=form.getAttribute('data-plan-id');
+        const materials=Array.prototype.slice.call(form.querySelectorAll('[name="materialQuantity"]')).map(function(input){return {lineId:input.getAttribute('data-line-id'),quantity:input.value};});
+        await callApi('apiCompletePackagingPlan',{planId:id,actualCount:val('actualCount'),box:val('box'),position:val('position'),materials:materials},opKey());
+        toast('Balení dokončeno, skutečná spotřeba materiálu odečtena a hotová zásoba vytvořena.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'labeling-plan-form') {
+        const materials=[{stockId:val('stockId'),plannedQuantity:val('plannedQuantity')}];
+        await callApi('apiCreateLabelingPlan',{hotStockId:val('hotStockId'),quantity:val('quantity'),materials:materials},opKey());
+        toast('Plán etiketování byl vytvořen.','success');
+        await refreshWorkspace();
+      } else if (form.classList.contains('labeling-complete-form')) {
+        const id=form.getAttribute('data-plan-id');
+        const materials=Array.prototype.slice.call(form.querySelectorAll('[name="materialQuantity"]')).map(function(input){return {lineId:input.getAttribute('data-line-id'),quantity:input.value};});
+        await callApi('apiCompleteLabelingPlan',{planId:id,actualCount:val('actualCount'),materials:materials},opKey());
+        toast('Etiketování dokončeno. Zásoba byla rozdělena podle skutečného počtu kusů.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'handover-form') {
+        const selected=Array.prototype.slice.call(form.querySelectorAll('[name="handoverSelected"]:checked'));
+        if(!selected.length)throw new Error('Vyberte alespoň jednu položku k předání.');
+        const items=selected.map(function(box){return {stockId:box.value,quantity:val('quantity-'+box.value)};});
+        await callApi('apiCreateHandover',{recipient:val('recipient'),reference:val('reference'),note:val('note'),items:items},opKey());
+        toast('Předání expedici potvrzeno a uloženo do auditu.','success');
+        await refreshWorkspace();
+        setRoute('/finished');
       }
     } catch(err) {
       const message = document.getElementById('receive-message');
