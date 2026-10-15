@@ -15,7 +15,7 @@
     { route:'/packs', icon:'▤', label:'Sklad surovin', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/scan', icon:'⌗', label:'Skenovat pack', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/production', icon:'⚗', label:'Výroba', roles:['ADMIN','VEDOUCI','VYROBA'] },
-    { route:'/recipes', icon:'≋', label:'Receptury', roles:['ADMIN','VEDOUCI'] },
+    { route:'/recipes', icon:'≋', label:'Receptury', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/materials', icon:'▦', label:'Suroviny a obaly', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/semi-finished', icon:'▧', label:'Polotovary', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/packaging', icon:'□', label:'Balení', roles:['ADMIN','VEDOUCI','VYROBA'] },
@@ -40,8 +40,8 @@
     return Number(value || 0).toLocaleString('cs-CZ', {maximumFractionDigits:3});
   }
   function status(value) {
-    const labels = {NOVY:'Nový',OTEVRENY:'Otevřený',VYPRAZDNENY:'Vyprázdněný',NAPLANOVANO:'Naplánováno',PRIPRAVENO:'Připraveno',PROBIHA:'Probíhá',POZASTAVENO:'Pozastaveno',DOKONCENO:'Dokončeno',ZRUSENO:'Zrušeno'};
-    const cls = value === 'NOVY' || value === 'NAPLANOVANO' ? 'tag-new' : value === 'OTEVRENY' || value === 'PROBIHA' ? 'tag-open' : value === 'VYPRAZDNENY' || value === 'DOKONCENO' ? 'tag-empty' : 'tag-warn';
+    const labels = {NOVY:'Nový',OTEVRENY:'Otevřený',VYPRAZDNENY:'Vyprázdněný',NAPLANOVANO:'Naplánováno',PRIPRAVENO:'Připraveno',PRIPRAVEN:'Připravený',SPOTREBOVANY:'Spotřebovaný',CEKA_ETYKETU:'Čeká na etiketu',PRIPRAVENO_K_PREDANI:'Připraveno k předání',PREDANO_EXPEDICI:'Předáno expedici',PROBIHA:'Probíhá',POZASTAVENO:'Pozastaveno',DOKONCENO:'Dokončeno',ZRUSENO:'Zrušeno'};
+    const cls = value === 'NOVY' || value === 'NAPLANOVANO' || value === 'PRIPRAVEN' ? 'tag-new' : value === 'OTEVRENY' || value === 'PROBIHA' ? 'tag-open' : value === 'VYPRAZDNENY' || value === 'DOKONCENO' || value === 'SPOTREBOVANY' || value === 'PREDANO_EXPEDICI' ? 'tag-empty' : value === 'PRIPRAVENO_K_PREDANI' ? 'tag-good' : value === 'CEKA_ETYKETU' ? 'tag-warn' : 'tag-warn';
     return '<span class="tag ' + cls + '">' + esc(labels[value] || value || '—') + '</span>';
   }
   function toast(message, kind) {
@@ -119,7 +119,7 @@
     const titles = {'/':'Přehled','/receive':'Příjem packu','/packs':'Sklad surovin','/scan':'Skenovat pack','/production':'Výroba','/recipes':'Receptury','/materials':'Suroviny a obaly','/semi-finished':'Polotovary','/packaging':'Balení','/finished':'Hotové výrobky','/labeling':'Etiketování','/handover':'Předání expedici','/history':'Historie','/settings':'Nastavení'};
     const title = currentRoute.indexOf('/pack/') === 0 ? 'Detail packu' : currentRoute.indexOf('/move/') === 0 ? 'Přesun packu' : (titles[currentRoute] || 'Sklad a výroba');
     const crumb = document.getElementById('crumb-title'); if (crumb) crumb.textContent = title;
-    const need = {'/receive':['ADMIN','VEDOUCI','SKLAD'],'/production':['ADMIN','VEDOUCI','VYROBA'],'/recipes':['ADMIN','VEDOUCI'],'/packaging':['ADMIN','VEDOUCI','VYROBA'],'/semi-finished':['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'],'/labeling':['ADMIN','VEDOUCI','VYROBA'],'/handover':['ADMIN','VEDOUCI'],'/settings':['ADMIN','VEDOUCI']};
+    const need = {'/receive':['ADMIN','VEDOUCI','SKLAD'],'/production':['ADMIN','VEDOUCI','VYROBA'],'/recipes':['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'],'/packaging':['ADMIN','VEDOUCI','VYROBA'],'/semi-finished':['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'],'/labeling':['ADMIN','VEDOUCI','VYROBA'],'/handover':['ADMIN','VEDOUCI'],'/settings':['ADMIN','VEDOUCI']};
     if (need[currentRoute] && need[currentRoute].indexOf(boot.actor.role)<0) return setPageContent(notice('Vaše role nemá oprávnění pro tuto obrazovku. Přístupové kontroly se zároveň provádějí na serveru.','error'));
     if (currentRoute === '/') return renderDashboard();
     if (currentRoute === '/receive') return renderReceive();
