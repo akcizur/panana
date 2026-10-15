@@ -11,6 +11,19 @@ Skladová a výrobní demo aplikace v černobílém retro-industrial stylu s ora
 - Zvětšené popisky a ovládací prvky, přehlednější tabulky a responzivní přihlášení.
 - Přidána česká metadata, vlastní favicon a příkazy pro typecheck.
 
+## Automatický build a deploy na GitHub Pages
+
+Každý push do větve `main` automaticky spustí GitHub Actions:
+
+1. Instalace závislostí pomocí pnpm s uzamčeným lockfilem.
+2. Kontrola TypeScriptu (`pnpm typecheck`).
+3. Produkční build (`pnpm build`) s base cestou `/panana/`.
+4. Nasazení sestaveného artefaktu na GitHub Pages.
+
+Veřejná adresa: https://akcizur.github.io/panana/
+
+Workflow lze spustit také ručně v záložce **Actions** pomocí **Run workflow**. Zdrojové soubory zůstávají v `main`; sestavení se nasazuje jako Pages artefakt, není potřeba commitovat složku `dist`.
+
 ## Spuštění
 
 Vyžaduje Node.js 22 a pnpm:
