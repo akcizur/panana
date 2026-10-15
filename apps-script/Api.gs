@@ -187,6 +187,10 @@ function apiCreateHandover(input,idempotencyKey) {
   requireAction_('handover');
   return createHandover_(input||{},idempotencyKey);
 }
+function apiConfirmSemiFinishedConsumed(semiId,idempotencyKey) {
+  requireAction_('vyroba');
+  return confirmSemiFinishedConsumed_(semiId,idempotencyKey);
+}
 
 function apiGetHistory(filters) {
   requireAction_('history');
