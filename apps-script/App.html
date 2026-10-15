@@ -402,14 +402,22 @@
   }
 
   function showPrintLabel(label) {
-    const p = label.pack;
-    const printRoot = document.getElementById('label-print');
-    printRoot.innerHTML = '<div class="label-sheet"><div class="label-qr" id="label-qr"></div><div class="label-info"><div class="label-name">' + esc(label.surovinaName) + '</div><div class="label-lot">LOT ' + esc(p.Lot) + '<br>EXP ' + esc(p.Expirace_MMYY) + '</div><div class="label-id">' + esc(p.Pack_ID) + '</div></div></div>';
-    const target = document.getElementById('label-qr');
+    const p=label.pack;
+    const isLarge=label.format==='60x40mm';
+    const width=isLarge?60:50;
+    const height=isLarge?40:30;
+    const qrSize=isLarge?26:22;
+    const printRoot=document.getElementById('label-print');
+    printRoot.innerHTML='<div class="label-sheet '+(isLarge?'label-large':'label-standard')+'"><div class="label-qr" id="label-qr"></div><div class="label-info"><div class="label-name">'+esc(label.surovinaName)+'</div><div class="label-lot">LOT '+esc(p.Lot)+'<br>EXP '+esc(p.Expirace_MMYY)+'</div><div class="label-id">'+esc(p.Pack_ID)+'</div></div></div>';
+    const styleId='dynamic-label-print-style';
+    let style=document.getElementById(styleId);
+    if(!style){style=document.createElement('style');style.id=styleId;document.head.appendChild(style);}
+    style.textContent='@media print{@page{size:'+width+'mm '+height+'mm;margin:0}.label-print,.label-sheet{width:'+width+'mm!important;height:'+height+'mm!important}.label-qr{width:'+qrSize+'mm!important;height:'+qrSize+'mm!important}.label-qr canvas,.label-qr img{width:100%!important;height:100%!important}}';
+    const target=document.getElementById('label-qr');
     try {
-      new QRCode(target, {text:label.payload,width:260,height:260,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
-    } catch (err) { toast('QR se nepodařilo vykreslit: ' + err.message,'error'); return; }
-    setTimeout(function () { window.print(); }, 350);
+      new QRCode(target,{text:label.payload,width:520,height:520,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+    } catch(err) { toast('QR se nepodařilo vykreslit: '+err.message,'error');return; }
+    setTimeout(function(){window.print();},350);
   }
 
   app.addEventListener('click', async function (event) {
