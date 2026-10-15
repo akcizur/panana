@@ -1,6 +1,7 @@
 function createRecipeVersion_(input, operationKey) {
   const baseId = optionalText_(input && input.baseRecipeId, 100);
-  const proposedName = requiredText_(input && input.name, 'Název receptury', 200);
+  const proposedName = optionalText_(input && input.name, 200);
+  if (!baseId && !proposedName) throw appError_('Název nové receptury je povinný.', 'VALIDATION_ERROR');
   const form = requireEnum_(String(input && input.outputForm || ''), ['SYPKA','KAPSLE'], 'Forma výstupu');
   const ingredientIds = Array.isArray(input && input.ingredientIds) ? input.ingredientIds.map(function(id) { return requiredText_(id, 'Surovina', 100); }) : [];
   if (!ingredientIds.length) throw appError_('Receptura musí obsahovat alespoň jednu surovinu.', 'VALIDATION_ERROR');
