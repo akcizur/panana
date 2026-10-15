@@ -52,12 +52,17 @@ function updateProductionPlanStatus_(planId, nextStatus, operationKey) {
     const allowed = {
       NAPLANOVANO:['PRIPRAVENO','ZRUSENO'],
       PRIPRAVENO:['PROBIHA','ZRUSENO'],
-      PROBIHA:['POZASTAVENO'],
+      PROBIHA:['POZASTAVENO','PROBIHA'],
       POZASTAVENO:['PROBIHA','ZRUSENO'],
       DOKONCENO:[],
       ZRUSENO:[]
     };
     if ((allowed[plan.Stav]||[]).indexOf(target)<0) throw appError_('Nepovolený přechod stavu '+plan.Stav+' → '+target+'.','VALIDATION_ERROR');
+    const planOps=records_('PLAN_VYROBY_OPERACE').filter(function(op){return op.Plan_Vyroby_ID===id;}).sort(function(a,b){return Number(a.Poradi)-Number(b.Poradi);});
+    if(target==='PROBIHA' && plan.Stav==='PROBIHA'){
+      if(planOps.some(function(op){return op.Stav==='PROBIHA';}))throw appError_('Operace už probíhá. Dokončete ji nebo ji pozastavte před spuštěním další.','VALIDATION_ERROR');
+      if(!planOps.some(function(op){return op.Stav==='NAPLANOVANO'||op.Stav==='POZASTAVENO';}))throw appError_('Všechny operace plánu už jsou dokončeny. Dokončete výrobní plán.','VALIDATION_ERROR');
+    }
     const now = new Date();
     const patch = {Stav:target,Updated_At:now,Operator:ctx.actor.email};
     if (target==='PROBIHA' && !plan.Datum_Zahajeni) patch.Datum_Zahajeni=now;
@@ -94,6 +99,8 @@ function completeProductionPlan_(input, operationKey) {
     const product = findRecord_('DB_PRODUKTY','Produkt_ID',plan.Produkt_ID);
     const usedRows = records_('PLAN_VYROBY_SUROVINY').filter(function(row){return row.Plan_Vyroby_ID===id && row.Stav_Pouziti==='POUZITO';});
     if (!usedRows.length) throw appError_('Nejdříve potvrďte skutečné použití alespoň jednoho packu.','VALIDATION_ERROR');
+    const allOps=records_('PLAN_VYROBY_OPERACE').filter(function(op){return op.Plan_Vyroby_ID===id;});
+    if(!allOps.length||allOps.some(function(op){return op.Stav!=='DOKONCENO';}))throw appError_('Před dokončením plánu potvrďte každou výrobní operaci v pořadí.','VALIDATION_ERROR');
     if (plan.Vstupni_Typ==='RECEPTURA') {
       const recipeRows=records_('DB_RECEPTURY_SUROVINY').filter(function(r){return r.Receptura_ID===plan.Receptura_ID;});
       const usedSuroviny=usedRows.map(function(u){const p=findRecord_('SKLAD_SUROVIN','Pack_ID',u.Pack_ID);return p&&p.Surovina_ID;});
@@ -103,7 +110,7 @@ function completeProductionPlan_(input, operationKey) {
     let actualCapsules='';
     if (product.Forma_Vystupu==='KAPSLE') {
       actualCapsules=requireNumber_(input && input.actualCapsules,'Skutečný počet kapslí',1,100000000);
-      if (Number(plan.Planovany_Pocet_Kapsli)>0 && actualCapsules>Number(plan.Planovany_Pocet_Kapsli)) throw appError_('Skutečný počet kapslí nesmí překročit plánovaný počet bez změny plánu.','VALIDATION_ERROR');
+      if (Number(plan.Skutecny_Pocet_Kapsli||0)!==actualCapsules) throw appError_('Skutečný počet musí odpovídat potvrzené operaci KAPSLOVANI.','VALIDATION_ERROR');
     }
     const now=new Date();
     const semiId=nextIdLocked_('POLOTOVAR','PO');
@@ -117,8 +124,6 @@ function completeProductionPlan_(input, operationKey) {
     records_('PLAN_VYROBY_OPERACE').filter(function(op){return op.Plan_Vyroby_ID===id;}).forEach(function(op){
       updateRecord_('PLAN_VYROBY_OPERACE','Operace_ID',op.Operace_ID,{Stav:'DOKONCENO',Skutecny_Konec:now,Operator:ctx.actor.email,Pocet_Kapsli_Skutecnost:op.Typ_Operace==='KAPSLOVANI'?actualCapsules:op.Pocet_Kapsli_Skutecnost});
     });
-    if (plan.Vstupni_Typ==='RECEPTURA') logMovement_({type:'PLAN_VYROBY',id:id,action:'MICHANI',referenceType:'RECEPTURA',referenceId:plan.Receptura_ID,operationId:ctx.operationId,user:ctx.actor.email,note:'Evidence seznamu packů bez hmotnostní bilance.'});
-    if (product.Forma_Vystupu==='KAPSLE') logMovement_({type:'PLAN_VYROBY',id:id,action:'KAPSLOVANI',delta:actualCapsules,unit:'ks',referenceType:'POLOTOVAR',referenceId:semiId,operationId:ctx.operationId,user:ctx.actor.email});
     logMovement_({type:'POLOTOVAR',id:semiId,action:'VZNIK_POLOTOVARU',delta:product.Forma_Vystupu==='KAPSLE'?actualCapsules:'',unit:product.Forma_Vystupu==='KAPSLE'?'ks':'',toBox:box,toPosition:position,referenceType:'PLAN_VYROBY',referenceId:id,operationId:ctx.operationId,user:ctx.actor.email});
     return {entityId:semiId,data:{planId:id,semiId:semiId,type:semiType,actualCapsules:actualCapsules}};
   });
@@ -133,4 +138,31 @@ function listProductionPlans_() {
     out.Operations=records_('PLAN_VYROBY_OPERACE').filter(function(p){return p.Plan_Vyroby_ID===plan.Plan_Vyroby_ID;}).map(publicRecord_);
     return out;
   }).sort(function(a,b){return String(b.Created_At).localeCompare(String(a.Created_At));});
+}
+
+
+function completeProductionOperation_(input,operationKey){
+  const planId=requiredText_(input&&input.planId,'Plan_Vyroby_ID',100);
+  const operationId=requiredText_(input&&input.operationId,'Operace_ID',100);
+  return withOperation_('DOKONCENI_VYROBNI_OPERACE',operationKey,{planId:planId,operationId:operationId,actualCapsules:input&&input.actualCapsules},function(ctx){
+    const plan=findRecord_('PLAN_VYROBY','Plan_Vyroby_ID',planId);
+    if(!plan||plan.Stav!=='PROBIHA')throw appError_('Výrobní plán musí být ve stavu PROBIHA.','VALIDATION_ERROR');
+    const ops=records_('PLAN_VYROBY_OPERACE').filter(function(op){return op.Plan_Vyroby_ID===planId;}).sort(function(a,b){return Number(a.Poradi)-Number(b.Poradi);});
+    const op=ops.find(function(item){return item.Operace_ID===operationId;});
+    if(!op||op.Stav!=='PROBIHA')throw appError_('Tato operace není aktivní.','VALIDATION_ERROR');
+    if(ops.some(function(item){return Number(item.Poradi)<Number(op.Poradi)&&item.Stav!=='DOKONCENO';}))throw appError_('Před dokončením musí být dokončeny předchozí operace.','VALIDATION_ERROR');
+    const now=new Date(),patch={Stav:'DOKONCENO',Skutecny_Konec:now,Operator:ctx.actor.email};
+    if(op.Typ_Operace==='KAPSLOVANI'){
+      const actual=requireNumber_(input&&input.actualCapsules,'Skutečný počet kapslí',1,100000000);
+      if(Number(plan.Planovany_Pocet_Kapsli)>0&&actual>Number(plan.Planovany_Pocet_Kapsli))throw appError_('Skutečný počet kapslí nesmí překročit plánovaný počet.','VALIDATION_ERROR');
+      patch.Pocet_Kapsli_Skutecnost=actual;
+      updateRecord_('PLAN_VYROBY','Plan_Vyroby_ID',planId,{Skutecny_Pocet_Kapsli:actual,Updated_At:now,Operator:ctx.actor.email});
+      logMovement_({type:'PLAN_VYROBY',id:planId,action:'KAPSLOVANI',delta:actual,unit:'ks',referenceType:'OPERACE',referenceId:operationId,operationId:ctx.operationId,user:ctx.actor.email});
+    }else if(input&&input.actualCapsules!=='') {
+      throw appError_('Skutečný počet kapslí lze zadat pouze při operaci KAPSLOVANI.','VALIDATION_ERROR');
+    }
+    if(op.Typ_Operace==='MICHANI')logMovement_({type:'PLAN_VYROBY',id:planId,action:'MICHANI',referenceType:'RECEPTURA',referenceId:plan.Receptura_ID||'',operationId:ctx.operationId,user:ctx.actor.email,note:'Evidence použitých packů bez hmotnostní bilance.'});
+    updateRecord_('PLAN_VYROBY_OPERACE','Operace_ID',operationId,patch);
+    return {entityId:planId,data:{planId:planId,operationId:operationId,status:'DOKONCENO',nextOperation:ops.filter(function(item){return Number(item.Poradi)>Number(op.Poradi);}).map(function(item){return item.Typ_Operace;})[0]||''}};
+  });
 }
