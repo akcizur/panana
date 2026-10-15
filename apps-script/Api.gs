@@ -119,6 +119,10 @@ function apiRequestPackLabel(packId, isReprint) {
   catch (err) { return { ok:false,error:String(err.message||err),code:err.code||'ERROR' }; }
 }
 
+function apiSaveAuthorizedUser(input,idempotencyKey) {
+  requireAction_('user_admin');
+  return saveAuthorizedUser_(input||{},idempotencyKey);
+}
 function apiCreateSurovina(input,idempotencyKey) {
   requireAction_('master_data');
   return createSurovina_(input||{},idempotencyKey);
@@ -208,6 +212,10 @@ function apiUpdateConfig(input,idempotencyKey) {
   const editable=['APP_BASE_URL','QR_LABEL_FORMAT_DEFAULT','QR_ENABLE_CAMERA_SCANNER'];
   if(editable.indexOf(key)<0)throw appError_('Tento konfigurační klíč nelze upravit přes rozhraní.','VALIDATION_ERROR');
   if(key==='APP_BASE_URL'&&value)validateAppBaseUrl_(value);
+  if(key==='APP_BASE_URL'){
+    const oldUrl=configValue_('APP_BASE_URL');
+    if(oldUrl&&oldUrl!==value&&records_('SKLAD_SUROVIN').length>0)throw appError_('Změna APP_BASE_URL po vytvoření packů je migrační událost. Pro zachování již vytištěných QR aktualizujte existující deployment místo vytvoření nového; změnu URL přes tuto obrazovku jsme zablokovali.','URL_MIGRATION_REQUIRED');
+  }
   if(key==='QR_LABEL_FORMAT_DEFAULT')requireEnum_(value,['50x30mm','60x40mm'],key);
   if(key==='QR_ENABLE_CAMERA_SCANNER')requireEnum_(value,['TRUE','FALSE'],key);
   return withOperation_('ZMENA_KONFIGURACE',idempotencyKey,{key:key,value:value},function(ctx){
