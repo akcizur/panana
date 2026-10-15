@@ -89,8 +89,9 @@ function completePackagingPlan_(input,operationKey){
     planLines.forEach(function(line){
       if(quantities[line.Plan_Baleni_Polozka_ID]==null)throw appError_('Chybí skutečná spotřeba materiálu.','VALIDATION_ERROR');
       const stock=activeMaterialStock_(line.Stock_Material_ID);
-      if(quantities[line.Plan_Baleni_Polozka_ID]>Number(stock.Mnozstvi_Aktualni||0))throw appError_('Nedostatek obalového materiálu '+line.Stock_Material_ID+'.','VALIDATION_ERROR');
-      ready.push({line:line,stock:stock,actual:quantities[line.Plan_Baleni_Polozka_ID]});
+      const actualQuantity=requireStockQuantity_(quantities[line.Plan_Baleni_Polozka_ID],'Skutečná spotřeba materiálu',stock.Jednotka,0,100000000);
+      if(actualQuantity>Number(stock.Mnozstvi_Aktualni||0))throw appError_('Nedostatek obalového materiálu '+line.Stock_Material_ID+'.','VALIDATION_ERROR');
+      ready.push({line:line,stock:stock,actual:actualQuantity});
     });
     if(plan.Zdroj_Typ==='PACK_SUROVINA'){
       const pack=findRecord_('SKLAD_SUROVIN','Pack_ID',plan.Zdroj_ID);
