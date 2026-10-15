@@ -62,15 +62,23 @@ function updateProductionPlanStatus_(planId, nextStatus, operationKey) {
     const patch = {Stav:target,Updated_At:now,Operator:ctx.actor.email};
     if (target==='PROBIHA' && !plan.Datum_Zahajeni) patch.Datum_Zahajeni=now;
     updateRecord_('PLAN_VYROBY','Plan_Vyroby_ID',id,patch);
-    records_('PLAN_VYROBY_OPERACE').filter(function(op){return op.Plan_Vyroby_ID===id && op.Stav!=='DOKONCENO' && op.Stav!=='ZRUSENO';}).forEach(function(op){
-      const opState = target==='PROBIHA' ? (op.Stav==='NAPLANOVANO'?'PROBIHA':op.Stav) : target==='POZASTAVENO'?'POZASTAVENO':target==='ZRUSENO'?'ZRUSENO':op.Stav;
-      if (opState!==op.Stav) {
-        const p={Stav:opState,Operator:ctx.actor.email};
-        if (target==='PROBIHA' && !op.Skutecny_Zacatek) p.Skutecny_Zacatek=now;
-        if (target==='ZRUSENO') p.Skutecny_Konec=now;
-        updateRecord_('PLAN_VYROBY_OPERACE','Operace_ID',op.Operace_ID,p);
+    const planOps=records_('PLAN_VYROBY_OPERACE').filter(function(op){return op.Plan_Vyroby_ID===id;}).sort(function(a,b){return Number(a.Poradi)-Number(b.Poradi);});
+    if(target==='PROBIHA'){
+      const running=planOps.find(function(op){return op.Stav==='PROBIHA';});
+      if(!running){
+        const nextOp=planOps.find(function(op){return op.Stav==='NAPLANOVANO'||op.Stav==='POZASTAVENO';});
+        if(!nextOp)throw appError_('Plán nemá žádnou operaci, kterou lze zahájit nebo obnovit.','VALIDATION_ERROR');
+        updateRecord_('PLAN_VYROBY_OPERACE','Operace_ID',nextOp.Operace_ID,{Stav:'PROBIHA',Skutecny_Zacatek:nextOp.Skutecny_Zacatek||now,Operator:ctx.actor.email});
       }
-    });
+    }else if(target==='POZASTAVENO'){
+      planOps.filter(function(op){return op.Stav==='PROBIHA';}).forEach(function(op){
+        updateRecord_('PLAN_VYROBY_OPERACE','Operace_ID',op.Operace_ID,{Stav:'POZASTAVENO',Operator:ctx.actor.email});
+      });
+    }else if(target==='ZRUSENO'){
+      planOps.filter(function(op){return op.Stav!=='DOKONCENO'&&op.Stav!=='ZRUSENO';}).forEach(function(op){
+        updateRecord_('PLAN_VYROBY_OPERACE','Operace_ID',op.Operace_ID,{Stav:'ZRUSENO',Skutecny_Konec:now,Operator:ctx.actor.email});
+      });
+    }
     return {entityId:id,data:{planId:id,status:target}};
   });
 }
