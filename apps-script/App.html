@@ -418,6 +418,17 @@
     const action = button.getAttribute('data-action');
     const id = button.getAttribute('data-id') || '';
     try {
+      if (action === 'clear-user-form') {
+        const form=document.getElementById('user-form');
+        if(form){form.reset();form.elements.email.value='';form.elements.role.value='READONLY';form.elements.active.checked=true;}
+        return;
+      }
+      if (action === 'edit-user') {
+        const user=(boot.users||[]).find(function(item){return item.Email===button.getAttribute('data-email');});
+        const form=document.getElementById('user-form');
+        if(user&&form){form.elements.email.value=user.Email;form.elements.role.value=user.Role;form.elements.active.checked=Boolean(user.Aktivni);form.scrollIntoView({behavior:'smooth',block:'center'});}
+        return;
+      }
       if (action === 'navigate') { setRoute(button.getAttribute('data-route') || '/'); return; }
       if (action === 'detail') { setRoute('/pack/' + encodeURIComponent(id)); return; }
       if (action === 'move') { setRoute('/move/' + encodeURIComponent(id)); return; }
@@ -543,6 +554,10 @@
         await callApi('apiUpdateConfig',{key:'QR_LABEL_FORMAT_DEFAULT',value:format},opKey());
         await callApi('apiUpdateConfig',{key:'QR_ENABLE_CAMERA_SCANNER',value:camera},opKey());
         toast('Nastavení uloženo. Nová URL se použije pro nové QR štítky.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'user-form') {
+        await callApi('apiSaveAuthorizedUser',{email:val('email'),role:val('role'),active:form.elements.active.checked},opKey());
+        toast('Uživatelská oprávnění byla uložena.','success');
         await refreshWorkspace();
       } else if (form.id === 'ingredient-form') {
         const result=await callApi('apiCreateSurovina',{name:val('name')},opKey());
