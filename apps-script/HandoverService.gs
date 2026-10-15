@@ -6,7 +6,7 @@ function createHandover_(input,operationKey){
   if(!requested.length)throw appError_('Předání musí obsahovat alespoň jednu položku.','VALIDATION_ERROR');
   const items=requested.map(function(item){
     const stockId=requiredText_(item&&item.stockId,'Hotovy_Stock_ID',120);
-    const quantity=requireNumber_(item&&item.quantity,'Počet balení k předání',1,10000000);
+    const quantity=requireInteger_(item&&item.quantity,'Počet balení k předání',1,10000000);
     return {stockId:stockId,quantity:quantity};
   });
   if(new Set(items.map(function(item){return item.stockId;})).size!==items.length)throw appError_('Každý skladový řádek zadejte v předání pouze jednou.','VALIDATION_ERROR');
