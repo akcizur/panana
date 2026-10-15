@@ -16,7 +16,8 @@ function createPackagingPlan_(input, operationKey) {
     const semi=findRecord_('SKLAD_POLOTOVARU','Polotovar_ID',sourceId);
     if(!semi||semi.Stav_Polotovaru==='SPOTREBOVANY')throw appError_('Polotovar neexistuje nebo je označen jako spotřebovaný.','VALIDATION_ERROR');
     if(semi.Produkt_ID!==productId)throw appError_('Polotovar neodpovídá zvolenému produktu.','VALIDATION_ERROR');
-    if(product.Forma_VYSTUPU && product.Forma_VYSTUPU!==semi.Typ_Polotovaru)throw appError_('Forma polotovaru neodpovídá produktu.','VALIDATION_ERROR');
+    const expectedSemiType = product.Forma_Vystupu === 'KAPSLE' ? 'KAPSLE_NEZABALENE' : 'SYPKA_SMES';
+    if (semi.Typ_Polotovaru !== expectedSemiType) throw appError_('Forma polotovaru neodpovídá produktu.','VALIDATION_ERROR');
     if(semi.Typ_Polotovaru==='KAPSLE_NEZABALENE'){
       const per=Number(product.Kapsli_na_Baleni||0);
       if(!per||per*plannedCount>Number(semi.Pocet_Kapsli_Aktualne||0))throw appError_('Plán vyžaduje více kapslí, než je evidováno v polotovaru.','VALIDATION_ERROR');
