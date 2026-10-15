@@ -53,7 +53,7 @@ const CONFIG_DEFAULTS = Object.freeze({
 });
 
 /** Run manually from the bound spreadsheet's Apps Script editor. Creates missing sheets only. */
-function initializeWorkbook() {
+function initializeWorkbook_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) throw new Error('Otevřete Apps Script z cílového Google Sheetu: Rozšíření → Apps Script.');
   ss.setSpreadsheetTimeZone(APP_CONFIG.TIMEZONE);
