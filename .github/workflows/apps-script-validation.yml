@@ -1,0 +1,31 @@
+name: Apps Script validation
+on:
+  push:
+    branches:
+      - main
+      - feat/apps-script-production-v2
+    paths:
+      - "apps-script/**"
+      - "scripts/validate-apps-script.mjs"
+      - ".github/workflows/apps-script-validation.yml"
+  pull_request:
+    paths:
+      - "apps-script/**"
+      - "scripts/validate-apps-script.mjs"
+      - ".github/workflows/apps-script-validation.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: apps-script-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Parse Apps Script sources and HTML JavaScript
+        run: node scripts/validate-apps-script.mjs

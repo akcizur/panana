@@ -1,6 +1,6 @@
 function createLabelingPlan_(input,operationKey){
   const hotId=requiredText_(input&&input.hotStockId,'Hotovy_Stock_ID',100);
-  const quantity=requireNumber_(input&&input.quantity,'Počet kusů k etiketování',1,10000000);
+  const quantity=requireInteger_(input&&input.quantity,'Počet kusů k etiketování',1,10000000);
   const materials=Array.isArray(input&&input.materials)?input.materials:[];
   const hot=findRecord_('SKLAD_HOTOVYCH_VYROBKU','Hotovy_Stock_ID',hotId);
   if(!hot||hot.Stav_Zpracovani!=='CEKA_ETYKETU')throw appError_('Vybraná zásoba nečeká na etiketu.','VALIDATION_ERROR');
@@ -10,7 +10,7 @@ function createLabelingPlan_(input,operationKey){
   if(!materials.length)throw appError_('Přidejte skladovou položku etiket.','VALIDATION_ERROR');
   const normalized=materials.map(function(line){
     const stockId=requiredText_(line&&line.stockId,'Stock_Material_ID etikety',100);
-    const planned=requireNumber_(line&&line.plannedQuantity,'Plánovaný počet etiket',1,10000000);
+    const planned=requireInteger_(line&&line.plannedQuantity,'Plánovaný počet etiket',1,10000000);
     const stock=activeMaterialStock_(stockId);
     const material=findRecord_('DB_BALICI_MATERIALY','Material_ID',stock.Material_ID);
     if(!material||material.Typ_Materialu!=='ETIKETA')throw appError_('Pro etiketování lze použít pouze materiál typu ETIKETA.','VALIDATION_ERROR');
@@ -53,7 +53,7 @@ function updateLabelingPlanStatus_(planId,nextStatus,operationKey){
 
 function completeLabelingPlan_(input,operationKey){
   const id=requiredText_(input&&input.planId,'Plan_Etiketovani_ID',100);
-  const actual=requireNumber_(input&&input.actualCount,'Skutečný počet etiketovaných kusů',1,10000000);
+  const actual=requireInteger_(input&&input.actualCount,'Skutečný počet etiketovaných kusů',1,10000000);
   const actualMaterials=Array.isArray(input&&input.materials)?input.materials:[];
   return withOperation_('DOKONCENI_ETYKETOVANI',operationKey,{planId:id,actual:actual,materials:actualMaterials},function(ctx){
     const plan=findRecord_('PLAN_ETYKETOVANI','Plan_Etiketovani_ID',id);
@@ -75,6 +75,7 @@ function completeLabelingPlan_(input,operationKey){
       const stock=activeMaterialStock_(line.Stock_Material_ID);
       const material=findRecord_('DB_BALICI_MATERIALY','Material_ID',line.Material_ID);
       if(!material||material.Typ_Materialu!=='ETIKETA')throw appError_('Položka již není typem ETIKETA.','VALIDATION_ERROR');
+      if(qtyById[line.Plan_Etiketovani_Polozka_ID]<actual)throw appError_('Spotřeba každé položky etikety musí pokrýt skutečný počet etiketovaných balení.','VALIDATION_ERROR');
       if(qtyById[line.Plan_Etiketovani_Polozka_ID]>Number(stock.Mnozstvi_Aktualni||0))throw appError_('Nedostatek etiket '+stock.Stock_Material_ID+'.','VALIDATION_ERROR');
       return {line:line,stock:stock,qty:qtyById[line.Plan_Etiketovani_Polozka_ID]};
     });

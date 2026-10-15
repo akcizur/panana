@@ -66,19 +66,7 @@ function receivePack_(input, operationKey) {
 }
 
 function reservePackIdLocked_() {
-  const yy = Number(Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, 'yy'));
-  let counter = findRecordByYear_('PACK', yy);
-  if (!counter) {
-    appendRecord_('ID_COUNTERS', { Entity_Type:'PACK', Year_YY:yy, Last_Sequence:0, Updated_At:new Date() });
-    counter = findRecordByYear_('PACK', yy);
-  }
-  const next = Number(counter.Last_Sequence || 0) + 1;
-  const id = 'P-' + String(yy).padStart(2, '0') + '-' + String(next).padStart(6, '0');
-  if (findRecord_('SKLAD_SUROVIN', 'Pack_ID', id)) throw appError_('ID_COUNTERS koliduje s existujícím Pack_ID. Je nutná kontrola správce.', 'ID_COLLISION');
-  const headers = SHEET_HEADERS.ID_COUNTERS;
-  const values = headers.map(function(h) { return h === 'Entity_Type' ? 'PACK' : h === 'Year_YY' ? yy : h === 'Last_Sequence' ? next : h === 'Updated_At' ? new Date() : ''; });
-  sheet_('ID_COUNTERS').getRange(counter._rowNumber, 1, 1, headers.length).setValues([values]);
-  return id;
+  return nextIdLocked_('PACK', 'P');
 }
 
 function movePack_(packId, input, operationKey, actor) {

@@ -53,7 +53,7 @@ const CONFIG_DEFAULTS = Object.freeze({
 });
 
 /** Run manually from the bound spreadsheet's Apps Script editor. Creates missing sheets only. */
-function initializeWorkbook() {
+function initializeWorkbook_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) throw new Error('Otevřete Apps Script z cílového Google Sheetu: Rozšíření → Apps Script.');
   ss.setSpreadsheetTimeZone(APP_CONFIG.TIMEZONE);
@@ -110,9 +110,8 @@ function seedCounters_(ss) {
   const sheet = ss.getSheetByName('ID_COUNTERS');
   const rows = sheet.getDataRange().getDisplayValues();
   const currentYear = Number(Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, 'yy'));
-  const types = ['PACK', 'VYROBNI_PLAN', 'PLAN_BALENI', 'ETIKETOVANI', 'PREDANI'];
-  types.forEach(function(type) {
+  Object.keys(ID_ENTITY_SPECS).forEach(function(type) {
     const found = rows.slice(1).some(function(row) { return row[0] === type && Number(row[1]) === currentYear; });
-    if (!found) sheet.appendRow([type, currentYear, 0, new Date()]);
+    if (!found) sheet.appendRow([type, currentYear, maxExistingSequence_(type, currentYear), new Date()]);
   });
 }

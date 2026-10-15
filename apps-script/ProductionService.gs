@@ -3,7 +3,7 @@ function createProductionPlan_(input, operationKey) {
   const inputType = requireEnum_(String(input && input.inputType || ''),['JEDNA_SUROVINA','RECEPTURA'],'Vstupní typ');
   const recipeId = optionalText_(input && input.recipeId,100);
   const lot = requiredText_(input && input.lot,'Výrobní lot',100);
-  const planDate = requiredText_(input && input.date,'Datum plánu',30);
+  const planDate = validateDateOnly_(input && input.date);
   const priority = requireEnum_(String(input && input.priority || 'NORMALNI'),['NIZKA','NORMALNI','VYSOKA','KRITICKA'],'Priorita');
   const plannedCapsules = input && input.plannedCapsules !== '' && input.plannedCapsules != null ? requireNumber_(input.plannedCapsules,'Plánovaný počet kapslí',1,100000000) : '';
   const product = findRecord_('DB_PRODUKTY','Produkt_ID',productId);
@@ -46,7 +46,7 @@ function createProductionPlan_(input, operationKey) {
 function updateProductionPlanStatus_(planId, nextStatus, operationKey) {
   const id = requiredText_(planId,'Plan_Vyroby_ID',100);
   const target = requireEnum_(nextStatus,['PRIPRAVENO','PROBIHA','POZASTAVENO','ZRUSENO'],'Stav plánu');
-  return withOperation_('ZMENA_STAVU_VYROBNIHO_PLANS',operationKey,{planId:id,target:target},function(ctx) {
+  return withOperation_('ZMENA_STAVU_VYROBNIHO_PLANU',operationKey,{planId:id,target:target},function(ctx) {
     const plan = findRecord_('PLAN_VYROBY','Plan_Vyroby_ID',id);
     if (!plan) throw appError_('Výrobní plán nebyl nalezen.','NOT_FOUND');
     const allowed = {
@@ -109,7 +109,7 @@ function completeProductionPlan_(input, operationKey) {
     }
     let actualCapsules='';
     if (product.Forma_Vystupu==='KAPSLE') {
-      actualCapsules=requireNumber_(input && input.actualCapsules,'Skutečný počet kapslí',1,100000000);
+      actualCapsules=requireInteger_(input && input.actualCapsules,'Skutečný počet kapslí',1,100000000);
       if (Number(plan.Skutecny_Pocet_Kapsli||0)!==actualCapsules) throw appError_('Skutečný počet musí odpovídat potvrzené operaci KAPSLOVANI.','VALIDATION_ERROR');
     }
     const now=new Date();
@@ -153,7 +153,7 @@ function completeProductionOperation_(input,operationKey){
     if(ops.some(function(item){return Number(item.Poradi)<Number(op.Poradi)&&item.Stav!=='DOKONCENO';}))throw appError_('Před dokončením musí být dokončeny předchozí operace.','VALIDATION_ERROR');
     const now=new Date(),patch={Stav:'DOKONCENO',Skutecny_Konec:now,Operator:ctx.actor.email};
     if(op.Typ_Operace==='KAPSLOVANI'){
-      const actual=requireNumber_(input&&input.actualCapsules,'Skutečný počet kapslí',1,100000000);
+      const actual=requireInteger_(input&&input.actualCapsules,'Skutečný počet kapslí',1,100000000);
       if(Number(plan.Planovany_Pocet_Kapsli)>0&&actual>Number(plan.Planovany_Pocet_Kapsli))throw appError_('Skutečný počet kapslí nesmí překročit plánovaný počet.','VALIDATION_ERROR');
       patch.Pocet_Kapsli_Skutecnost=actual;
       updateRecord_('PLAN_VYROBY','Plan_Vyroby_ID',planId,{Skutecny_Pocet_Kapsli:actual,Updated_At:now,Operator:ctx.actor.email});
