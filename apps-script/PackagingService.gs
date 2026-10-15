@@ -11,7 +11,8 @@ function createPackagingPlan_(input, operationKey) {
     if(product.Typ_Vstupu!=='JEDNA_SUROVINA'||product.Forma_Vystupu!=='SYPKA')throw appError_('Přímé plnění raw packu je povoleno pouze pro sypký produkt s jednou surovinou.','VALIDATION_ERROR');
     const pack=findRecord_('SKLAD_SUROVIN','Pack_ID',validatePackId_(sourceId));
     if(!pack||pack.Stav_Packu==='VYPRAZDNENY')throw appError_('Zdrojový pack neexistuje nebo je vyprázdněný.','VALIDATION_ERROR');
-    if(pack.Surovina_ID==='')throw appError_('Pack nemá přiřazenou surovinu.','VALIDATION_ERROR');
+    const packIngredient=findRecord_('DB_SUROVINY','Surovina_ID',pack.Surovina_ID);
+    if(!packIngredient||!boolValue_(packIngredient.Aktivni))throw appError_('Surovina ve zdrojovém packu není aktivní.','VALIDATION_ERROR');
   } else {
     const semi=findRecord_('SKLAD_POLOTOVARU','Polotovar_ID',sourceId);
     if(!semi||semi.Stav_Polotovaru==='SPOTREBOVANY')throw appError_('Polotovar neexistuje nebo je označen jako spotřebovaný.','VALIDATION_ERROR');
