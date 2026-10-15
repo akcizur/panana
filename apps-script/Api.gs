@@ -67,6 +67,8 @@ function apiBootstrap() {
     labelingPlans:listLabelingPlans_(),
     semiFinished:semiFinished,
     finishedStock:finished,
+    handovers:listHandovers_(),
+    users:actor.role==='ADMIN'?records_('DB_UZIVATELE').map(function(user){return {Email:String(user.Email),Role:String(user.Role),Aktivni:boolValue_(user.Aktivni),Created_At:asIso_(user.Created_At),Updated_At:asIso_(user.Updated_At)};}):[],
     qr:publicQrConfig_()
   };
 }
