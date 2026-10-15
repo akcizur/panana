@@ -67,7 +67,6 @@ function updateProductionPlanStatus_(planId, nextStatus, operationKey) {
     const patch = {Stav:target,Updated_At:now,Operator:ctx.actor.email};
     if (target==='PROBIHA' && !plan.Datum_Zahajeni) patch.Datum_Zahajeni=now;
     updateRecord_('PLAN_VYROBY','Plan_Vyroby_ID',id,patch);
-    const planOps=records_('PLAN_VYROBY_OPERACE').filter(function(op){return op.Plan_Vyroby_ID===id;}).sort(function(a,b){return Number(a.Poradi)-Number(b.Poradi);});
     if(target==='PROBIHA'){
       const running=planOps.find(function(op){return op.Stav==='PROBIHA';});
       if(!running){
@@ -97,6 +96,7 @@ function completeProductionPlan_(input, operationKey) {
     if (!plan) throw appError_('Výrobní plán nebyl nalezen.','NOT_FOUND');
     if (plan.Stav!=='PROBIHA') throw appError_('Dokončit lze pouze plán ve stavu PROBIHA.','VALIDATION_ERROR');
     const product = findRecord_('DB_PRODUKTY','Produkt_ID',plan.Produkt_ID);
+    if (!product) throw appError_('Produkt výrobního plánu nebyl nalezen.','VALIDATION_ERROR');
     const usedRows = records_('PLAN_VYROBY_SUROVINY').filter(function(row){return row.Plan_Vyroby_ID===id && row.Stav_Pouziti==='POUZITO';});
     if (!usedRows.length) throw appError_('Nejdříve potvrďte skutečné použití alespoň jednoho packu.','VALIDATION_ERROR');
     const allOps=records_('PLAN_VYROBY_OPERACE').filter(function(op){return op.Plan_Vyroby_ID===id;});
@@ -158,7 +158,7 @@ function completeProductionOperation_(input,operationKey){
       patch.Pocet_Kapsli_Skutecnost=actual;
       updateRecord_('PLAN_VYROBY','Plan_Vyroby_ID',planId,{Skutecny_Pocet_Kapsli:actual,Updated_At:now,Operator:ctx.actor.email});
       logMovement_({type:'PLAN_VYROBY',id:planId,action:'KAPSLOVANI',delta:actual,unit:'ks',referenceType:'OPERACE',referenceId:operationId,operationId:ctx.operationId,user:ctx.actor.email});
-    }else if(input&&input.actualCapsules!=='') {
+    }else if(input&&input.actualCapsules!=null&&input.actualCapsules!=='') {
       throw appError_('Skutečný počet kapslí lze zadat pouze při operaci KAPSLOVANI.','VALIDATION_ERROR');
     }
     if(op.Typ_Operace==='MICHANI')logMovement_({type:'PLAN_VYROBY',id:planId,action:'MICHANI',referenceType:'RECEPTURA',referenceId:plan.Receptura_ID||'',operationId:ctx.operationId,user:ctx.actor.email,note:'Evidence použitých packů bez hmotnostní bilance.'});
