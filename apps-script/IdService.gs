@@ -13,7 +13,13 @@ function nextIdLocked_(entityType, prefix) {
     VYROBNI_PLAN:['PLAN_VYROBY','Plan_Vyroby_ID'],
     PLAN_BALENI:['PLAN_BALENI','Plan_Baleni_ID'],
     ETIKETOVANI:['PLAN_ETYKETOVANI','Plan_Etiketovani_ID'],
-    PREDANI:['PREDANI_EXPEDICI','Predani_ID']
+    PREDANI:['PREDANI_EXPEDICI','Predani_ID'],
+    SUROVINA:['DB_SUROVINY','Surovina_ID'],
+    PRODUKT:['DB_PRODUKTY','Produkt_ID'],
+    MATERIAL:['DB_BALICI_MATERIALY','Material_ID'],
+    MATERIAL_STOCK:['SKLAD_BALICIHO_MATERIALU','Stock_Material_ID'],
+    RECEPTURA:['DB_RECEPTURY','Receptura_ID'],
+    POLOTOVAR:['SKLAD_POLOTOVARU','Polotovar_ID']
   };
   if (mapping[entityType] && findRecord_(mapping[entityType][0], mapping[entityType][1], id)) {
     throw appError_('ID_COUNTERS je nižší než existující ID. Automatické přepsání sekvence bylo zablokováno.', 'ID_COLLISION');
