@@ -13,6 +13,9 @@ const ACTION_ROLES = Object.freeze({
   baleni: ['ADMIN', 'VEDOUCI', 'VYROBA'],
   expedition: ['ADMIN', 'VEDOUCI'],
   config: ['ADMIN', 'VEDOUCI'],
+  master_data: ['ADMIN', 'VEDOUCI'],
+  labeling: ['ADMIN', 'VEDOUCI', 'VYROBA'],
+  handover: ['ADMIN', 'VEDOUCI'],
   user_admin: ['ADMIN']
 });
 
