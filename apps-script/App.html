@@ -17,6 +17,7 @@
     { route:'/production', icon:'⚗', label:'Výroba', roles:['ADMIN','VEDOUCI','VYROBA'] },
     { route:'/recipes', icon:'≋', label:'Receptury', roles:['ADMIN','VEDOUCI'] },
     { route:'/materials', icon:'▦', label:'Suroviny a obaly', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/semi-finished', icon:'▧', label:'Polotovary', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/packaging', icon:'□', label:'Balení', roles:['ADMIN','VEDOUCI','VYROBA'] },
     { route:'/finished', icon:'▣', label:'Hotové výrobky', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/labeling', icon:'▤', label:'Etiketování', roles:['ADMIN','VEDOUCI','VYROBA'] },
@@ -115,10 +116,10 @@
   function renderCurrent() {
     if (!boot) return;
     document.querySelectorAll('.nav button').forEach(function (btn) { btn.setAttribute('aria-current', btn.getAttribute('data-route') === currentRoute ? 'page' : 'false'); });
-    const titles = {'/':'Přehled','/receive':'Příjem packu','/packs':'Sklad surovin','/scan':'Skenovat pack','/production':'Výroba','/recipes':'Receptury','/materials':'Suroviny a obaly','/packaging':'Balení','/finished':'Hotové výrobky','/labeling':'Etiketování','/handover':'Předání expedici','/history':'Historie','/settings':'Nastavení'};
+    const titles = {'/':'Přehled','/receive':'Příjem packu','/packs':'Sklad surovin','/scan':'Skenovat pack','/production':'Výroba','/recipes':'Receptury','/materials':'Suroviny a obaly','/semi-finished':'Polotovary','/packaging':'Balení','/finished':'Hotové výrobky','/labeling':'Etiketování','/handover':'Předání expedici','/history':'Historie','/settings':'Nastavení'};
     const title = currentRoute.indexOf('/pack/') === 0 ? 'Detail packu' : currentRoute.indexOf('/move/') === 0 ? 'Přesun packu' : (titles[currentRoute] || 'Sklad a výroba');
     const crumb = document.getElementById('crumb-title'); if (crumb) crumb.textContent = title;
-    const need = {'/receive':['ADMIN','VEDOUCI','SKLAD'],'/production':['ADMIN','VEDOUCI','VYROBA'],'/recipes':['ADMIN','VEDOUCI'],'/packaging':['ADMIN','VEDOUCI','VYROBA'],'/labeling':['ADMIN','VEDOUCI','VYROBA'],'/handover':['ADMIN','VEDOUCI'],'/settings':['ADMIN','VEDOUCI']};
+    const need = {'/receive':['ADMIN','VEDOUCI','SKLAD'],'/production':['ADMIN','VEDOUCI','VYROBA'],'/recipes':['ADMIN','VEDOUCI'],'/packaging':['ADMIN','VEDOUCI','VYROBA'],'/semi-finished':['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'],'/labeling':['ADMIN','VEDOUCI','VYROBA'],'/handover':['ADMIN','VEDOUCI'],'/settings':['ADMIN','VEDOUCI']};
     if (need[currentRoute] && need[currentRoute].indexOf(boot.actor.role)<0) return setPageContent(notice('Vaše role nemá oprávnění pro tuto obrazovku. Přístupové kontroly se zároveň provádějí na serveru.','error'));
     if (currentRoute === '/') return renderDashboard();
     if (currentRoute === '/receive') return renderReceive();
@@ -127,6 +128,7 @@
     if (currentRoute === '/production') return renderProduction();
     if (currentRoute === '/recipes') return renderRecipes();
     if (currentRoute === '/materials') return renderMaterials();
+    if (currentRoute === '/semi-finished') return renderSemiFinished();
     if (currentRoute === '/packaging') return renderPackaging();
     if (currentRoute === '/finished') return renderFinished();
     if (currentRoute === '/labeling') return renderLabeling();
@@ -368,6 +370,18 @@
     setPageContent(pageHead('BALENÍ A OBALY', 'Balení', 'Spotřeba se odečítá až při potvrzení. Nedostatek kteréhokoli materiálu blokuje dokončení.', '') + create + '<div class="grid">' + (list||'<section class="card"><div class="empty"><strong>Žádné plány balení</strong>Založte plán pro raw pack nebo evidovaný polotovar.</div></section>') + '</div>');
   }
 
+  function renderSemiFinished() {
+    const rows=(boot.semiFinished||[]).map(function(item){
+      const kind=item.Typ_Polotovaru==='SYPKA_SMES'?'Sypká směs':'Nezabalené kapsle';
+      const consumed=item.Stav_Polotovaru==='SPOTREBOVANY';
+      const actions=item.Typ_Polotovaru==='SYPKA_SMES'&&!consumed&&canRole(['ADMIN','VEDOUCI','VYROBA'])?'<button class="btn btn-small btn-danger" data-action="consume-semi-finished" data-id="'+esc(item.Polotovar_ID)+'">Potvrdit spotřebování</button>':'';
+      const amount=item.Typ_Polotovaru==='KAPSLE_NEZABALENE'?number(item.Pocet_Kapsli_Aktualne)+' ks':'Nesleduje se hmotnost';
+      return '<tr><td class="code">'+esc(item.Polotovar_ID)+'</td><td><strong>'+esc(item.Product_Name)+'</strong><div class="subtext">'+esc(item.Plan_Vyroby_ID)+'</div></td><td>'+esc(kind)+'</td><td>'+status(item.Stav_Polotovaru)+'</td><td>'+esc(amount)+'</td><td>'+esc(item.Box_Number)+' / '+esc(item.Pozice)+'</td><td>'+actions+'</td></tr>';
+    }).join('');
+    setPageContent(pageHead('VÝSTUP VÝROBY','Polotovary','Sypká směs nemá evidovanou zbytkovou hmotnost. Její spotřebování potvrzuje obsluha samostatnou akcí; nezabalené kapsle se sledují kusově.','')+
+      '<section class="card"><div class="table-wrap">'+(rows?'<table class="table"><thead><tr><th>Polotovar ID</th><th>Produkt / plán</th><th>Typ</th><th>Stav</th><th>Množství</th><th>Umístění</th><th>Akce</th></tr></thead><tbody>'+rows+'</tbody></table>':'<div class="empty"><strong>Zatím nejsou žádné polotovary</strong>Po dokončení výrobního plánu se sem zapíše sypká směs nebo nezabalené kapsle.</div>')+'</div></section>');
+  }
+
   function renderFinished() {
     const list=(boot.finishedStock||[]).map(function(s){
       const actions=s.Stav_Zpracovani==='CEKA_ETYKETU'&&canRole(['ADMIN','VEDOUCI','VYROBA'])?'<button class="btn btn-small btn-primary" data-action="navigate" data-route="/labeling">Etiketovat</button>':s.Stav_Zpracovani==='PRIPRAVENO_K_PREDANI'&&canRole(['ADMIN','VEDOUCI'])?'<button class="btn btn-small btn-primary" data-action="navigate" data-route="/handover">Předat expedici</button>':'';
@@ -491,6 +505,14 @@
         pending=true;button.disabled=true;
         const result=await callApi('apiUpdateLabelingPlanStatus',button.getAttribute('data-plan-id'),button.getAttribute('data-status'),opKey());
         toast(result.duplicate?'Změna stavu už byla zpracována.':'Stav etiketování změněn.','success');
+        await refreshWorkspace();
+        return;
+      }
+      if (action === 'consume-semi-finished') {
+        if(!confirm('Potvrzujete, že sypký polotovar '+id+' je fyzicky spotřebovaný? Aplikace neodvozuje zbytek z hmotnosti.'))return;
+        pending=true;button.disabled=true;
+        await callApi('apiConfirmSemiFinishedConsumed',id,opKey());
+        toast('Spotřebování sypké směsi bylo potvrzeno a auditováno.','success');
         await refreshWorkspace();
         return;
       }
