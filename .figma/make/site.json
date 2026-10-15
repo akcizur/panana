@@ -1,12 +1,15 @@
 {
   "description": "Skladová a výrobní demo aplikace s přihlašovací obrazovkou, přehledným dashboardem, QR štítky a hmotnostmi vždy v gramech.",
   "robots": {
-    "index": false
+    "index": true
   },
   "accessibility": {
     "addBypassLinks": false,
     "ignoreReducedMotion": false
   },
   "title": "SKLAD/VÝROBA · Retro Edition 1.6",
-  "language": "cs"
+  "language": "cs",
+  "icons": {
+    "icon": "./favicon.svg"
+  }
 }
