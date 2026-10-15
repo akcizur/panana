@@ -207,7 +207,7 @@
         '</div><div class="detail-warning">Evidence nepočítá aktuální ani spotřebovanou hmotnost. Vyprázdnění potvrzuje obsluha samostatně.</div></section>' +
         '<div class="grid grid-two" style="margin-top:16px">' +
           card('Historie pohybů','<div class="card-body flush">' + (d.movements.length ? '<div class="table-wrap"><table class="table"><thead><tr><th>Čas</th><th>Akce</th><th>Umístění</th><th>Uživatel</th></tr></thead><tbody>' + d.movements.map(function(m) { return '<tr><td>' + esc(date(m.Timestamp)) + '</td><td>' + esc(m.Action) + '</td><td>' + esc(m.From_Box_Number || '—') + ' / ' + esc(m.From_Position || '—') + ' → ' + esc(m.To_Box_Number || '—') + ' / ' + esc(m.To_Position || '—') + '</td><td>' + esc(m.User) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Zatím bez pohybů.</div>') + '</div>') +
-          card('Použití ve výrobě','<div class="card-body">' + (d.uses.length ? '<div class="grid">' + d.uses.map(function(u) { return '<div class="detail-field"><strong>' + esc(u.Plan_Vyroby_ID) + '</strong><div class="subtext">' + esc(u.Stav_Pouziti) + ' · ' + esc(date(u.Pouzito_At)) + '</div></div>'; }).join('') + '</div>' : '<div class="empty">Pack zatím není propojen s výrobním plánem.</div>') + (p.Stav_Packu !== 'VYPRAZDNENY' && ['ADMIN','VEDOUCI','SKLAD','VYROBA'].indexOf(boot.actor.role)>=0 ? '<form id="use-pack-form" style="margin-top:14px"><div class="field"><label for="plan-id">Plan_Vyroby_ID</label><input id="plan-id" name="planId" class="input" required placeholder="VY-26-000001"></div><div class="form-actions"><button class="btn" type="submit">Potvrdit skutečné použití</button></div><p class="field-hint">Před potvrzením fyzicky ověřte dostupnost materiálu. Hmotnostní spotřeba se neeviduje.</p></form>' : '') + '</div>') +
+          card('Použití ve výrobě','<div class="card-body">' + (d.uses.length ? '<div class="grid">' + d.uses.map(function(u) { return '<div class="detail-field"><strong>' + esc(u.Plan_Vyroby_ID) + '</strong><div class="subtext">' + esc(u.Stav_Pouziti) + ' · ' + esc(date(u.Pouzito_At)) + '</div></div>'; }).join('') + '</div>' : '<div class="empty">Pack zatím není propojen s výrobním plánem.</div>') + (p.Stav_Packu !== 'VYPRAZDNENY' && ['ADMIN','VEDOUCI','SKLAD','VYROBA'].indexOf(boot.actor.role)>=0 ? '<form id="use-pack-form" style="margin-top:14px"><div class="field"><label for="plan-id">Plan_Vyroby_ID</label><input id="plan-id" name="planId" class="input" required placeholder="VY-26-000001"></div><div class="form-actions"><button class="btn" type="submit" name="intent" value="plan">Přiřadit do plánu</button><button class="btn btn-primary" type="submit" name="intent" value="use">Potvrdit skutečné použití</button></div><p class="field-hint">Přiřazení do plánu stav nemění. Před skutečným použitím fyzicky ověřte dostupnost materiálu.</p></form>' : '') + '</div>') +
         '</div>');
     } catch (err) { operationError(err); }
   }
@@ -325,8 +325,10 @@
         setRoute('/pack/' + encodeURIComponent(val('id').toUpperCase()));
       } else if (form.id === 'use-pack-form') {
         const id = currentRoute.slice(6);
-        const result = await callApi('apiMarkPackUsed',id,val('planId'),opKey());
-        toast(result.duplicate ? 'Použití už bylo zpracováno.' : 'Použití packu bylo potvrzeno.','success');
+        const intent = event.submitter && event.submitter.value === 'plan' ? 'plan' : 'use';
+        const method = intent === 'plan' ? 'apiPlanPackForProduction' : 'apiMarkPackUsed';
+        const result = await callApi(method,id,val('planId'),opKey());
+        toast(result.duplicate ? 'Požadavek už byl zpracován.' : (intent === 'plan' ? 'Pack přiřazen do plánu; stav se nezměnil.' : 'Použití packu bylo potvrzeno.'),'success');
         await renderPackDetail(id);
       } else if (form.id === 'settings-form') {
         const url = val('url');
