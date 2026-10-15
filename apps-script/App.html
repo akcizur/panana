@@ -14,6 +14,13 @@
     { route:'/receive', icon:'＋', label:'Příjem packu', roles:['ADMIN','VEDOUCI','SKLAD'] },
     { route:'/packs', icon:'▤', label:'Sklad surovin', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/scan', icon:'⌗', label:'Skenovat pack', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/production', icon:'⚗', label:'Výroba', roles:['ADMIN','VEDOUCI','VYROBA'] },
+    { route:'/recipes', icon:'≋', label:'Receptury', roles:['ADMIN','VEDOUCI'] },
+    { route:'/materials', icon:'▦', label:'Suroviny a obaly', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/packaging', icon:'□', label:'Balení', roles:['ADMIN','VEDOUCI','VYROBA'] },
+    { route:'/finished', icon:'▣', label:'Hotové výrobky', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/labeling', icon:'▤', label:'Etiketování', roles:['ADMIN','VEDOUCI','VYROBA'] },
+    { route:'/handover', icon:'⇢', label:'Předání expedici', roles:['ADMIN','VEDOUCI'] },
     { route:'/history', icon:'↺', label:'Historie', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/settings', icon:'⚙', label:'Nastavení', roles:['ADMIN','VEDOUCI'] }
   ];
@@ -108,13 +115,22 @@
   function renderCurrent() {
     if (!boot) return;
     document.querySelectorAll('.nav button').forEach(function (btn) { btn.setAttribute('aria-current', btn.getAttribute('data-route') === currentRoute ? 'page' : 'false'); });
-    const titles = {'/':'Přehled','/receive':'Příjem packu','/packs':'Sklad surovin','/scan':'Skenovat pack','/history':'Historie','/settings':'Nastavení'};
+    const titles = {'/':'Přehled','/receive':'Příjem packu','/packs':'Sklad surovin','/scan':'Skenovat pack','/production':'Výroba','/recipes':'Receptury','/materials':'Suroviny a obaly','/packaging':'Balení','/finished':'Hotové výrobky','/labeling':'Etiketování','/handover':'Předání expedici','/history':'Historie','/settings':'Nastavení'};
     const title = currentRoute.indexOf('/pack/') === 0 ? 'Detail packu' : currentRoute.indexOf('/move/') === 0 ? 'Přesun packu' : (titles[currentRoute] || 'Sklad a výroba');
     const crumb = document.getElementById('crumb-title'); if (crumb) crumb.textContent = title;
+    const need = {'/receive':['ADMIN','VEDOUCI','SKLAD'],'/production':['ADMIN','VEDOUCI','VYROBA'],'/recipes':['ADMIN','VEDOUCI'],'/packaging':['ADMIN','VEDOUCI','VYROBA'],'/labeling':['ADMIN','VEDOUCI','VYROBA'],'/handover':['ADMIN','VEDOUCI'],'/settings':['ADMIN','VEDOUCI']};
+    if (need[currentRoute] && need[currentRoute].indexOf(boot.actor.role)<0) return setPageContent(notice('Vaše role nemá oprávnění pro tuto obrazovku. Přístupové kontroly se zároveň provádějí na serveru.','error'));
     if (currentRoute === '/') return renderDashboard();
     if (currentRoute === '/receive') return renderReceive();
     if (currentRoute === '/packs') return renderPacks();
     if (currentRoute === '/scan') return renderScan();
+    if (currentRoute === '/production') return renderProduction();
+    if (currentRoute === '/recipes') return renderRecipes();
+    if (currentRoute === '/materials') return renderMaterials();
+    if (currentRoute === '/packaging') return renderPackaging();
+    if (currentRoute === '/finished') return renderFinished();
+    if (currentRoute === '/labeling') return renderLabeling();
+    if (currentRoute === '/handover') return renderHandover();
     if (currentRoute === '/history') return renderHistory();
     if (currentRoute === '/settings') return renderSettings();
     if (currentRoute.indexOf('/move/') === 0) return renderMove(decodeURIComponent(currentRoute.slice(6)));
