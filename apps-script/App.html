@@ -614,7 +614,7 @@
         await refreshWorkspace();
       } else if (form.id === 'recipe-form') {
         const selected=Array.prototype.slice.call(form.querySelectorAll('[name="ingredientIds"] option:checked')).map(function(option){return option.value;});
-        await callApi('apiCreateRecipeVersion',{name:val('name'),outputForm:val('outputForm'),ingredientIds:selected,note:val('note')},opKey());
+        await callApi('apiCreateRecipeVersion',{baseRecipeId:val('baseRecipeId'),name:val('name'),outputForm:val('outputForm'),ingredientIds:selected,note:val('note')},opKey());
         toast('Neměnná verze receptury byla vytvořena.','success');
         await refreshWorkspace();
       } else if (form.id === 'production-plan-form') {
@@ -677,6 +677,15 @@
   });
   app.addEventListener('change', function(event) {
     if (currentRoute === '/packs' && event.target && ['pack-status','pack-position'].includes(event.target.id)) loadPackRows();
+    if (event.target && event.target.id === 'recipe-base') {
+      const recipe=(boot.recipes||[]).find(function(item){return item.Receptura_ID===event.target.value;});
+      const name=document.getElementById('recipe-name');
+      const form=document.getElementById('recipe-form');
+      if(name&&form){
+        name.value=recipe?recipe.Nazev_Receptury:'';
+        form.elements.outputForm.value=recipe?recipe.Forma_Vystupu:'SYPKA';
+      }
+    }
   });
   window.addEventListener('hashchange', function() {
     currentRoute = routeFromHash();
