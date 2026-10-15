@@ -66,7 +66,7 @@ function requireInteger_(value,label,min,max){
 }
 function validateDateOnly_(value){
   const text=String(value==null?'':value).trim();
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(text))throw appError_('Datum musí být ve formátu YYYY-MM-DD.','VALIDATION_ERROR');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(text))throw appError_('Datum musí být ve formátu YYYY-MM-DD.','VALIDATION_ERROR');
   const parts=text.split('-').map(Number);
   const date=new Date(Date.UTC(parts[0],parts[1]-1,parts[2]));
   if(date.getUTCFullYear()!==parts[0]||date.getUTCMonth()!==parts[1]-1||date.getUTCDate()!==parts[2])throw appError_('Datum není platné.','VALIDATION_ERROR');
