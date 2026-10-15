@@ -68,7 +68,12 @@ expectThrow(() => sandbox.validateAppBaseUrl_('https://script.google.com/macros/
 expectThrow(() => sandbox.validateAppBaseUrl_('https://example.com/exec'), 'Externí host QR URL');
 assert.equal(sandbox.requireNumber_('2.5', 'test', 0, 5), 2.5);
 expectThrow(() => sandbox.requireNumber_('-1', 'test', 0, 5), 'Záporné množství');
-console.log('✓ Základní validační testy Pack_ID, expirace, jednotek, URL a čísel prošly.');
+assert.equal(sandbox.requireInteger_('12', 'ks', 1, 100), 12);
+expectThrow(() => sandbox.requireInteger_('12.5', 'ks', 1, 100), 'Desetinný počet kusů');
+assert.equal(sandbox.validateDateOnly_('2026-10-15'), '2026-10-15');
+expectThrow(() => sandbox.validateDateOnly_('2026-02-30'), 'Neplatné kalendářní datum');
+expectThrow(() => sandbox.validateDateOnly_('15/10/2026'), 'Neplatný formát data');
+console.log('✓ Validační testy Pack_ID, expirace, jednotek, URL, celých počtů a dat prošly.');
 
 const config = await readFile(path.join(appDir, 'Config.gs'), 'utf8');
 for (const required of [
