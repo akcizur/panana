@@ -2,7 +2,7 @@ function createPackagingPlan_(input, operationKey) {
   const productId=requiredText_(input&&input.productId,'Produkt_ID',100);
   const sourceType=requireEnum_(String(input&&input.sourceType||''),['PACK_SUROVINA','POLOTOVAR'],'Typ zdroje');
   const sourceId=requiredText_(input&&input.sourceId,'Zdroj_ID',120);
-  const plannedCount=requireNumber_(input&&input.plannedCount,'Plánovaný počet balení',1,10000000);
+  const plannedCount=requireInteger_(input&&input.plannedCount,'Plánovaný počet balení',1,10000000);
   const box=requiredText_(input&&input.box,'Box_Number hotového výrobku',80);
   const position=activePosition_(input&&input.position);
   const product=findRecord_('DB_PRODUKTY','Produkt_ID',productId);
@@ -30,8 +30,8 @@ function createPackagingPlan_(input, operationKey) {
     const stockId=requiredText_(line&&line.stockId,'Stock_Material_ID',100);
     const qty=requireNumber_(line&&line.plannedQuantity,'Plánovaná spotřeba materiálu',0.000001,100000000);
     const stock=activeMaterialStock_(stockId);
-    if(qty>Number(stock.Mnozstvi_Aktualni||0))throw appError_('Nedostatečná dostupnost materiálu '+stockId+'.','VALIDATION_ERROR');
-    return {stockId:stockId,materialId:String(stock.Material_ID),quantity:qty,unit:String(stock.Jednotka)};
+    const validatedQty=requireStockQuantity_(qty,'Plánovaná spotřeba materiálu',stock.Jednotka,0.000001,100000000);\n    if(validatedQty>Number(stock.Mnozstvi_Aktualni||0))throw appError_('Nedostatečná dostupnost materiálu '+stockId+'.','VALIDATION_ERROR');
+    return {stockId:stockId,materialId:String(stock.Material_ID),quantity:validatedQty,unit:String(stock.Jednotka)};
   });
   if(new Set(normalized.map(function(m){return m.stockId;})).size!==normalized.length)throw appError_('Skladovou položku materiálu uveďte pouze jednou.','VALIDATION_ERROR');
   return withOperation_('VYTVORENI_PLANS_BALENI',operationKey,{productId:productId,sourceType:sourceType,sourceId:sourceId,plannedCount:plannedCount,box:box,position:position,materials:normalized},function(ctx){
@@ -67,7 +67,7 @@ function updatePackagingPlanStatus_(planId,nextStatus,operationKey){
 
 function completePackagingPlan_(input,operationKey){
   const id=requiredText_(input&&input.planId,'Plan_Baleni_ID',100);
-  const actualCount=requireNumber_(input&&input.actualCount,'Skutečný počet balení',1,10000000);
+  const actualCount=requireInteger_(input&&input.actualCount,'Skutečný počet balení',1,10000000);
   const box=requiredText_(input&&input.box,'Box_Number hotového výrobku',80);
   const position=activePosition_(input&&input.position);
   const actualMaterials=Array.isArray(input&&input.materials)?input.materials:[];
