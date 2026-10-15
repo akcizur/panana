@@ -4,17 +4,17 @@
     <base target="_top">
     <meta charset="utf-8">
     <meta name="color-scheme" content="light">
-    <?!= include('Styles'); ?>
+    <?!= include_('Styles'); ?>
   </head>
   <body>
     <div id="app" class="app-frame">
       <div class="boot" role="status"><span class="boot-mark">S/V</span><span>Načítám provozní aplikaci…</span></div>
     </div>
-    <?!= include('QrVendor'); ?>
+    <?!= include_('QrVendor'); ?>
     <script>
       window.APP_INITIAL_VIEW = <?!= JSON.stringify(initialView) ?>;
       window.APP_INITIAL_PACK_ID = <?!= JSON.stringify(initialPackId) ?>;
     </script>
-    <?!= include('App'); ?>
+    <?!= include_('App'); ?>
   </body>
 </html>
