@@ -149,6 +149,10 @@ function apiCompleteProductionPlan(input,idempotencyKey) {
   requireAction_('vyroba');
   return completeProductionPlan_(input||{},idempotencyKey);
 }
+function apiCompleteProductionOperation(input,idempotencyKey) {
+  requireAction_('vyroba');
+  return completeProductionOperation_(input||{},idempotencyKey);
+}
 function apiCreatePackagingPlan(input,idempotencyKey) {
   requireAction_('baleni');
   return createPackagingPlan_(input||{},idempotencyKey);
