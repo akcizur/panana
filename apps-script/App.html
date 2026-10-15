@@ -1,0 +1,371 @@
+<script>
+(function () {
+  'use strict';
+  const app = document.getElementById('app');
+  let boot = null;
+  let currentRoute = '/';
+  let activePack = null;
+  let historyTab = 'movements';
+  let pending = false;
+  let toastTimer = 0;
+
+  const NAV = [
+    { route:'/', icon:'⌂', label:'Přehled', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/receive', icon:'＋', label:'Příjem packu', roles:['ADMIN','VEDOUCI','SKLAD'] },
+    { route:'/packs', icon:'▤', label:'Sklad surovin', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/scan', icon:'⌗', label:'Skenovat pack', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/history', icon:'↺', label:'Historie', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/settings', icon:'⚙', label:'Nastavení', roles:['ADMIN','VEDOUCI'] }
+  ];
+
+  function esc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+  function date(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? esc(value) : new Intl.DateTimeFormat('cs-CZ', {timeZone:'Europe/Prague', day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);
+  }
+  function number(value) {
+    return Number(value || 0).toLocaleString('cs-CZ', {maximumFractionDigits:3});
+  }
+  function status(value) {
+    const labels = {NOVY:'Nový',OTEVRENY:'Otevřený',VYPRAZDNENY:'Vyprázdněný',NAPLANOVANO:'Naplánováno',PRIPRAVENO:'Připraveno',PROBIHA:'Probíhá',POZASTAVENO:'Pozastaveno',DOKONCENO:'Dokončeno',ZRUSENO:'Zrušeno'};
+    const cls = value === 'NOVY' || value === 'NAPLANOVANO' ? 'tag-new' : value === 'OTEVRENY' || value === 'PROBIHA' ? 'tag-open' : value === 'VYPRAZDNENY' || value === 'DOKONCENO' ? 'tag-empty' : 'tag-warn';
+    return '<span class="tag ' + cls + '">' + esc(labels[value] || value || '—') + '</span>';
+  }
+  function toast(message, kind) {
+    let node = document.getElementById('toast');
+    if (!node) {
+      node = document.createElement('div'); node.id = 'toast'; node.setAttribute('role','status'); document.body.appendChild(node);
+    }
+    node.className = kind || '';
+    node.textContent = message;
+    node.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { node.hidden = true; }, 5000);
+  }
+  function callApi(method) {
+    const args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      if (!window.google || !google.script || !google.script.run) {
+        reject(new Error('Aplikace musí běžet jako nasazená Google Apps Script webová aplikace.'));
+        return;
+      }
+      const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(function (err) {
+        reject(new Error(err && err.message ? err.message : String(err || 'Neznámá chyba serveru.')));
+      });
+      try { runner[method].apply(runner, args); } catch (err) { reject(err); }
+    });
+  }
+  function opKey() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+    return 'web-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + '-' + Math.random().toString(36).slice(2);
+  }
+  function pageRoot() { return document.getElementById('page-root'); }
+  function setPageContent(html) {
+    const root = pageRoot();
+    if (root) root.innerHTML = html;
+  }
+  function pageHead(kicker, title, subtitle, actions) {
+    return '<header class="page-head"><div><div class="eyebrow">' + esc(kicker) + '</div><h1>' + esc(title) + '</h1>' + (subtitle ? '<p>' + esc(subtitle) + '</p>' : '') + '</div>' + (actions ? '<div class="actions">' + actions + '</div>' : '') + '</header>';
+  }
+  function card(title, content, right) {
+    return '<section class="card"><div class="card-head"><span class="card-title">' + title + '</span>' + (right || '') + '</div>' + content + '</section>';
+  }
+  function stat(label, value, note) {
+    return '<article class="stat"><div class="stat-label">' + esc(label) + '</div><div class="stat-value">' + esc(number(value)) + '</div><div class="stat-note">' + esc(note || '') + '</div></article>';
+  }
+  function notice(text, type) { return '<div class="notice ' + esc(type || '') + '" role="status">' + esc(text) + '</div>'; }
+  function loading(text) { return '<div class="loading"><span class="spinner"></span><span>' + esc(text || 'Načítání…') + '</span></div>'; }
+  function operationError(err) { setPageContent(notice(err && err.message ? err.message : String(err), 'error')); }
+  function hrefButton(label, route, primary) {
+    return '<button class="btn ' + (primary ? 'btn-primary' : '') + '" data-action="navigate" data-route="' + esc(route) + '">' + esc(label) + '</button>';
+  }
+  function renderShell() {
+    const actor = boot.actor;
+    const nav = NAV.filter(function (n) { return n.roles.indexOf(actor.role) >= 0; }).map(function (n) {
+      return '<button type="button" data-action="navigate" data-route="' + n.route + '" aria-current="' + (currentRoute === n.route ? 'page' : 'false') + '"><span class="nav-icon">' + n.icon + '</span><span>' + esc(n.label) + '</span></button>';
+    }).join('');
+    app.innerHTML = '<div class="layout"><aside class="sidebar"><div class="brand"><div><div class="brand-logo">SKLAD <b>/</b> VÝROBA</div><div class="brand-sub">Provozní evidence · CZ</div></div></div><div class="nav-title">Pracovní prostor</div><nav class="nav" aria-label="Hlavní navigace">' + nav + '</nav><div class="sidebar-foot"><div>Google účet · role ověřena serverem</div><div class="actor">' + esc(actor.email) + '<br>' + esc(actor.role) + '</div></div></aside><main><header class="topbar"><div class="breadcrumb">Provoz / <strong id="crumb-title">Přehled</strong></div><div class="top-actions"><span class="tag tag-good">Autorizováno</span></div></header><div id="page-root"></div></main></div><div class="label-print" id="label-print"></div>';
+    renderCurrent();
+  }
+  function showAccessDenied(err) {
+    app.innerHTML = '<main style="display:grid;min-height:100vh;place-items:center;padding:24px"><section class="card" style="width:min(620px,100%)"><div class="card-head"><span class="card-title">Přístup k provozním datům</span></div><div class="card-body"><div class="eyebrow">OCHRANA DAT SKLADU</div><h1 style="font-size:30px;letter-spacing:-.06em;margin:8px 0">Přístup nebyl povolen</h1><p style="color:var(--muted);margin:0 0 18px">' + esc(err && err.message ? err.message : 'Účet nelze ověřit.') + '</p><p>Požádejte správce, aby váš Google účet přidal do listu <b>DB_UZIVATELE</b> a nastavil aktivní roli. Aplikace se při chybě identity nepřepne do anonymního režimu.</p><div class="notice">Pokud se tato zpráva zobrazuje i správci, ověřte konfiguraci nasazení Apps Script a zda identita uživatele není prázdná.</div></div></section></main>';
+  }
+  function setRoute(route) {
+    currentRoute = route || '/';
+    if (currentRoute === '/') history.replaceState(null, '', window.location.pathname + window.location.search);
+    else window.location.hash = currentRoute;
+    renderShell();
+  }
+  function routeFromHash() {
+    const hash = String(window.location.hash || '').replace(/^#/, '');
+    return hash && hash.charAt(0) === '/' ? hash : '/';
+  }
+  function renderCurrent() {
+    if (!boot) return;
+    document.querySelectorAll('.nav button').forEach(function (btn) { btn.setAttribute('aria-current', btn.getAttribute('data-route') === currentRoute ? 'page' : 'false'); });
+    const titles = {'/':'Přehled','/receive':'Příjem packu','/packs':'Sklad surovin','/scan':'Skenovat pack','/history':'Historie','/settings':'Nastavení'};
+    const title = currentRoute.indexOf('/pack/') === 0 ? 'Detail packu' : currentRoute.indexOf('/move/') === 0 ? 'Přesun packu' : (titles[currentRoute] || 'Sklad a výroba');
+    const crumb = document.getElementById('crumb-title'); if (crumb) crumb.textContent = title;
+    if (currentRoute === '/') return renderDashboard();
+    if (currentRoute === '/receive') return renderReceive();
+    if (currentRoute === '/packs') return renderPacks();
+    if (currentRoute === '/scan') return renderScan();
+    if (currentRoute === '/history') return renderHistory();
+    if (currentRoute === '/settings') return renderSettings();
+    if (currentRoute.indexOf('/move/') === 0) return renderMove(decodeURIComponent(currentRoute.slice(6)));
+    if (currentRoute.indexOf('/pack/') === 0) return renderPackDetail(decodeURIComponent(currentRoute.slice(6)));
+    setPageContent('<div class="empty"><strong>Stránka nebyla nalezena</strong>Použijte navigaci v levém menu.</div>');
+  }
+
+  async function renderDashboard() {
+    const s = boot.stats;
+    const configWarning = boot.qr.appBaseUrlConfigured ? '' : notice('Před prvním příjmem nastavte v Nastavení produkční APP_BASE_URL končící /exec. Bez ní systém nevytvoří pack bez funkčního QR štítku.', 'error');
+    setPageContent(pageHead('PROVOZNÍ PŘEHLED', 'Sklad a výroba', 'Aktuální stav evidence. Hmotnostní spotřeba raw packů se nepočítá.', '<button class="btn btn-primary" data-action="navigate" data-route="/receive">＋ Přijmout pack</button>') +
+      configWarning +
+      '<section class="stats">' +
+        stat('Celkem packů',s.packsTotal,'Všechna evidovaná ID') +
+        stat('Nové packy',s.packsNew,'Zatím nepoužité') +
+        stat('Otevřené packy',s.packsOpen,'Použití potvrzeno obsluhou') +
+        stat('Vyprázdněné',s.packsEmpty,'Konečný stav') +
+      '</section><section class="stats">' +
+        stat('Aktivní výrobní plány',s.plansActive,'Naplánováno / probíhá / pozastaveno') +
+        stat('Probíhající výroba',s.plansRunning,'Stav z PLAN_VYROBY') +
+        stat('Čeká na etiketu',s.waitingLabel,'Hotové skladové řádky') +
+        stat('Připraveno k předání',s.readyHandover,'Poslední interní krok') +
+      '</section>' +
+      '<div class="grid grid-two">' +
+        card('Rychlé akce','<div class="card-body"><div class="grid"><button class="btn btn-primary" data-action="navigate" data-route="/receive">＋ Příjem nového packu</button><button class="btn" data-action="navigate" data-route="/scan">⌗ Otevřít pack přes QR / ID</button><button class="btn" data-action="navigate" data-route="/packs">Zobrazit sklad surovin →</button><button class="btn" data-action="navigate" data-route="/history">Otevřít historii pohybů →</button></div></div>') +
+        card('Provozní pravidla','<div class="card-body"><div class="grid"><div><div class="tag tag-new">Raw pack</div><p class="subtext">Jedno fyzické balení = jedno neměnné Pack_ID a jeden QR štítek.</p></div><div><div class="tag tag-open">Použití</div><p class="subtext">Pack se otevře až po potvrzení skutečného použití.</p></div><div><div class="tag tag-warn">Hmotnost</div><p class="subtext">Eviduje se pouze počáteční hmotnost. Zbytková ani spotřebovaná hmotnost se nepočítá.</p></div></div></div>') +
+      '</div>');
+  }
+
+  function renderReceive() {
+    const canReceive = ['ADMIN','VEDOUCI','SKLAD'].indexOf(boot.actor.role) >= 0;
+    setPageContent(pageHead('SKLAD SUROVIN', 'Příjem packu', 'Založí jedno fyzické balení s neměnným ID. Tisk QR štítku je oddělená auditovaná akce.') +
+      (!boot.qr.appBaseUrlConfigured ? notice('Nejdříve nastavte APP_BASE_URL v Nastavení. Příjem je zablokován, aby nevznikl pack bez funkčního QR.', 'error') : '') +
+      '<section class="card"><div class="card-head"><span class="card-title">Nový raw pack</span><span class="tag tag-new">NOVY</span></div><form id="receive-form" class="card-body"><div class="field-grid">' +
+      '<div class="field"><label for="receive-material">Surovina *</label><select class="input" id="receive-material" name="surovinaId" required>' + boot.suroviny.map(function(s) { return '<option value="' + esc(s.id) + '">' + esc(s.name) + ' · ' + esc(s.id) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label for="receive-lot">Lot *</label><input class="input" id="receive-lot" name="lot" maxlength="100" required placeholder="Např. LOT-2026-04"></div>' +
+      '<div class="field"><label for="receive-expiry">Expirace (MM/YY) *</label><input class="input" id="receive-expiry" name="expiry" required pattern="(0[1-9]|1[0-2])/[0-9]{2}" placeholder="04/28"><span class="field-hint">Zadejte přesně ve formátu MM/YY.</span></div>' +
+      '<div class="field"><label for="receive-weight">Počáteční hmotnost *</label><div style="display:grid;grid-template-columns:minmax(0,1fr) 90px;gap:8px"><input class="input" id="receive-weight" name="weight" type="number" min="0.000001" step="any" required placeholder="Např. 25000"><select class="input" name="unit"><option value="g">g</option><option value="kg">kg</option></select></div><span class="field-hint">Jediná evidovaná hmotnost packu.</span></div>' +
+      '<div class="field"><label for="receive-box">Box_Number *</label><input class="input" id="receive-box" name="box" maxlength="80" required placeholder="Např. B-23"></div>' +
+      '<div class="field"><label for="receive-position">Pozice *</label><select class="input" id="receive-position" name="position" required>' + boot.positions.map(function(p) { return '<option value="' + esc(p.position) + '">' + esc(p.position) + '</option>'; }).join('') + '</select></div>' +
+      '</div><div id="receive-message"></div><div class="form-actions"><button class="btn btn-primary" type="submit" ' + (!canReceive || !boot.qr.appBaseUrlConfigured || !boot.suroviny.length ? 'disabled' : '') + '>Vytvořit Pack_ID a přijmout</button><button class="btn" type="button" data-action="navigate" data-route="/packs">Zrušit</button></div></form></section>');
+  }
+
+  async function renderPacks(query) {
+    setPageContent(pageHead('EVIDENCE SUROVIN', 'Sklad surovin', 'Vyhledávejte podle Pack_ID, suroviny, lotu, expirace, boxu, pozice nebo stavu.', '<button class="btn btn-primary" data-action="navigate" data-route="/receive">＋ Příjem packu</button>') +
+      '<section class="card"><div class="toolbar"><input id="pack-query" class="input" placeholder="Hledat Pack_ID, surovinu, lot…" value="' + esc(query || '') + '" aria-label="Vyhledat pack"><select id="pack-status" class="input" aria-label="Filtrovat podle stavu"><option value="">Všechny stavy</option><option value="NOVY">Nový</option><option value="OTEVRENY">Otevřený</option><option value="VYPRAZDNENY">Vyprázdněný</option></select><input id="pack-box" class="input" placeholder="Box" aria-label="Filtrovat box"><select id="pack-position" class="input" aria-label="Filtrovat pozici"><option value="">Všechny pozice</option>' + boot.positions.map(function(p) { return '<option value="' + esc(p.position) + '">' + esc(p.position) + '</option>'; }).join('') + '</select></div><div id="pack-table">' + loading('Načítám skladové packy…') + '</div></section>');
+    await loadPackRows();
+  }
+  async function loadPackRows() {
+    const target = document.getElementById('pack-table');
+    if (!target) return;
+    try {
+      const result = await callApi('apiSearchPacks', {
+        query:(document.getElementById('pack-query') || {}).value || '',
+        status:(document.getElementById('pack-status') || {}).value || '',
+        box:(document.getElementById('pack-box') || {}).value || '',
+        position:(document.getElementById('pack-position') || {}).value || ''
+      });
+      target.innerHTML = !result.packs.length ? '<div class="empty"><strong>Nebyly nalezeny žádné packy</strong>Změňte filtry nebo založte nový příjem.</div>' :
+        '<div class="table-wrap"><table class="table"><thead><tr><th>Pack_ID</th><th>Surovina / lot</th><th>Expirace</th><th>Stav</th><th>Aktuální umístění</th><th>Počáteční hmotnost</th><th></th></tr></thead><tbody>' +
+        result.packs.map(function(p) { return '<tr><td><button class="btn btn-ghost btn-small code" data-action="detail" data-id="' + esc(p.Pack_ID) + '">' + esc(p.Pack_ID) + ' →</button></td><td><strong>' + esc(p.Nazev_Suroviny) + '</strong><div class="subtext">' + esc(p.Lot) + '</div></td><td>' + esc(p.Expirace_MMYY) + '</td><td>' + status(p.Stav_Packu) + '</td><td><strong>' + esc(p.Box_Number) + '</strong><div class="subtext">Pozice ' + esc(p.Pozice) + '</div></td><td>' + esc(number(p.Pocatecni_Hmotnost)) + ' ' + esc(p.Jednotka_Hmotnosti) + '</td><td><button class="btn btn-small" data-action="move" data-id="' + esc(p.Pack_ID) + '">Přesunout</button></td></tr>'; }).join('') +
+        '</tbody></table></div>';
+    } catch (err) { target.innerHTML = notice(err.message, 'error'); }
+  }
+
+  function renderScan() {
+    setPageContent(pageHead('QR IDENTIFIKACE', 'Skenovat pack', 'Telefon může přečíst QR štítek nativní kamerou a otevřít tento deeplink. Pokud skener není dostupný, zadejte Pack_ID ručně.') +
+      '<section class="card"><div class="card-head"><span class="card-title">Otevřít podle Pack_ID</span></div><form id="scan-form" class="card-body"><div class="field"><label for="scan-id">Pack_ID</label><input class="input" id="scan-id" name="id" required pattern="P-[0-9]{2}-[0-9]{6}" placeholder="P-26-000123" autocomplete="off" style="max-width:420px"></div><div class="form-actions"><button class="btn btn-primary" type="submit">Otevřít detail →</button><button class="btn" type="button" data-action="navigate" data-route="/packs">Zobrazit sklad</button></div></form></section>' +
+      '<div class="notice" style="margin-top:14px">Samotné načtení QR nic nemění. Přesun, použití a vyprázdnění vyžadují samostatné potvrzení a serverový zápis.</div>');
+    const input = document.getElementById('scan-id');
+    if (input && window.APP_INITIAL_PACK_ID) { input.value = window.APP_INITIAL_PACK_ID; window.APP_INITIAL_PACK_ID = ''; }
+  }
+
+  async function renderPackDetail(id) {
+    setPageContent(loading('Načítám aktuální stav z Google Sheets…'));
+    try {
+      const response = await callApi('apiGetPackDetail', id);
+      const d = response.detail;
+      activePack = d.pack;
+      const p = d.pack;
+      setPageContent(pageHead('DETAIL RAW PACKU', 'Pack detail', 'Stav a umístění se vždy čtou z aktuální evidence, ne z obsahu QR.', '<button class="btn" data-action="navigate" data-route="/packs">← Zpět do skladu</button>') +
+        '<section class="card"><div class="detail-hero"><div><div class="eyebrow">' + esc(d.surovinaName) + '</div><div class="detail-id">' + esc(p.Pack_ID) + '</div><div class="detail-name">Lot ' + esc(p.Lot) + ' · expirace ' + esc(p.Expirace_MMYY) + '</div><div class="detail-state">' + status(p.Stav_Packu) + '</div></div><div class="actions"><button class="btn btn-primary" data-action="print-label" data-id="' + esc(p.Pack_ID) + '">▦ Vytisknout QR štítek</button><button class="btn" data-action="reprint-label" data-id="' + esc(p.Pack_ID) + '">Znovu vytisknout</button><button class="btn" data-action="move" data-id="' + esc(p.Pack_ID) + '">Přesunout</button>' + (p.Stav_Packu === 'OTEVRENY' && ['ADMIN','VEDOUCI','SKLAD'].indexOf(boot.actor.role)>=0 ? '<button class="btn btn-danger" data-action="empty-pack" data-id="' + esc(p.Pack_ID) + '">Potvrdit vyprázdnění</button>' : '') + '</div></div>' +
+        '<div class="detail-grid">' +
+          detailField('Počáteční hmotnost', number(p.Pocatecni_Hmotnost) + ' ' + p.Jednotka_Hmotnosti) +
+          detailField('Aktuální box', p.Box_Number) +
+          detailField('Aktuální pozice', p.Pozice) +
+          detailField('Přijato', date(p.Received_At)) +
+          detailField('Otevřeno', date(p.Opened_At)) +
+          detailField('Vyprázdněno', date(p.Emptied_At)) +
+        '</div><div class="detail-warning">Evidence nepočítá aktuální ani spotřebovanou hmotnost. Vyprázdnění potvrzuje obsluha samostatně.</div></section>' +
+        '<div class="grid grid-two" style="margin-top:16px">' +
+          card('Historie pohybů','<div class="card-body flush">' + (d.movements.length ? '<div class="table-wrap"><table class="table"><thead><tr><th>Čas</th><th>Akce</th><th>Umístění</th><th>Uživatel</th></tr></thead><tbody>' + d.movements.map(function(m) { return '<tr><td>' + esc(date(m.Timestamp)) + '</td><td>' + esc(m.Action) + '</td><td>' + esc(m.From_Box_Number || '—') + ' / ' + esc(m.From_Position || '—') + ' → ' + esc(m.To_Box_Number || '—') + ' / ' + esc(m.To_Position || '—') + '</td><td>' + esc(m.User) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Zatím bez pohybů.</div>') + '</div>') +
+          card('Použití ve výrobě','<div class="card-body">' + (d.uses.length ? '<div class="grid">' + d.uses.map(function(u) { return '<div class="detail-field"><strong>' + esc(u.Plan_Vyroby_ID) + '</strong><div class="subtext">' + esc(u.Stav_Pouziti) + ' · ' + esc(date(u.Pouzito_At)) + '</div></div>'; }).join('') + '</div>' : '<div class="empty">Pack zatím není propojen s výrobním plánem.</div>') + (p.Stav_Packu !== 'VYPRAZDNENY' && ['ADMIN','VEDOUCI','SKLAD','VYROBA'].indexOf(boot.actor.role)>=0 ? '<form id="use-pack-form" style="margin-top:14px"><div class="field"><label for="plan-id">Plan_Vyroby_ID</label><input id="plan-id" name="planId" class="input" required placeholder="VY-26-000001"></div><div class="form-actions"><button class="btn" type="submit">Potvrdit skutečné použití</button></div><p class="field-hint">Před potvrzením fyzicky ověřte dostupnost materiálu. Hmotnostní spotřeba se neeviduje.</p></form>' : '') + '</div>') +
+        '</div>');
+    } catch (err) { operationError(err); }
+  }
+  function detailField(label, value) {
+    return '<div class="detail-field"><span>' + esc(label) + '</span><strong>' + esc(value || '—') + '</strong></div>';
+  }
+
+  async function renderMove(id) {
+    setPageContent(loading('Načítám současné umístění…'));
+    try {
+      const result = await callApi('apiGetPackDetail', id);
+      const p = result.detail.pack;
+      setPageContent(pageHead('SKLADOVÝ POHYB', 'Přesun packu ' + p.Pack_ID, 'Přesun nemění Pack_ID ani QR; nové umístění se zapisuje do skladu a auditu.') +
+        '<section class="card"><div class="card-head"><span class="card-title">Současné umístění</span>' + status(p.Stav_Packu) + '</div><div class="card-body"><div class="detail-grid" style="padding:0;margin-bottom:20px">' + detailField('Box',p.Box_Number) + detailField('Pozice',p.Pozice) + detailField('Lot',p.Lot) + '</div><form id="move-form" data-id="' + esc(p.Pack_ID) + '"><div class="field-grid"><div class="field"><label for="move-box">Cílový box *</label><input class="input" id="move-box" name="box" required maxlength="80" value="' + esc(p.Box_Number) + '"></div><div class="field"><label for="move-position">Cílová pozice *</label><select class="input" id="move-position" name="position" required>' + boot.positions.map(function(x) { return '<option value="' + esc(x.position) + '" ' + (x.position === p.Pozice ? 'selected' : '') + '>' + esc(x.position) + '</option>'; }).join('') + '</select></div><div class="field" style="grid-column:1/-1"><label for="move-note">Poznámka (volitelné)</label><input class="input" id="move-note" name="note" maxlength="500" placeholder="Důvod přesunu"></div></div><div class="form-actions"><button type="submit" class="btn btn-primary">Potvrdit přesun</button><button type="button" class="btn" data-action="detail" data-id="' + esc(p.Pack_ID) + '">Zrušit</button></div></form></div></section>');
+    } catch (err) { operationError(err); }
+  }
+
+  async function renderHistory() {
+    setPageContent(pageHead('DOHLEDATELNOST', 'Historie a audit', 'Provozní logy se nepřepisují. U OPERATIONS_LOG se mění pouze stav zotavení stejné operace.') +
+      '<section class="card"><div class="toolbar"><input id="history-query" class="input" placeholder="Pack_ID, akce, uživatel, operace…" aria-label="Hledat v historii"><button class="btn" data-action="history-filter">Hledat</button><div class="actions" style="margin-left:auto"><button class="btn btn-small" data-action="history-tab" data-tab="movements">Pohyby</button><button class="btn btn-small" data-action="history-tab" data-tab="labels">QR štítky</button><button class="btn btn-small" data-action="history-tab" data-tab="operations">Operace</button></div></div><div id="history-table">' + loading('Načítám auditní záznamy…') + '</div></section>');
+    await loadHistory();
+  }
+  async function loadHistory() {
+    const target = document.getElementById('history-table'); if (!target) return;
+    try {
+      const data = await callApi('apiGetHistory',{query:(document.getElementById('history-query')||{}).value||'',limit:200});
+      const list = historyTab === 'labels' ? data.labels : historyTab === 'operations' ? data.operations : data.movements;
+      let html = '';
+      if (!list.length) html = '<div class="empty"><strong>Bez záznamů</strong>Pro tento filtr nebyly nalezeny žádné události.</div>';
+      else if (historyTab === 'movements') html = '<div class="table-wrap"><table class="table"><thead><tr><th>Čas</th><th>Entita</th><th>Akce</th><th>Umístění</th><th>Uživatel</th><th>Operation_ID</th></tr></thead><tbody>' + list.map(function(r){return '<tr><td>'+esc(date(r.Timestamp))+'</td><td><button class="btn btn-ghost btn-small code" data-action="detail" data-id="'+esc(r.Entita_ID)+'">'+esc(r.Entita_ID)+'</button></td><td>'+esc(r.Action)+'</td><td>'+esc(r.From_Box_Number||'—')+'/'+esc(r.From_Position||'—')+' → '+esc(r.To_Box_Number||'—')+'/'+esc(r.To_Position||'—')+'</td><td>'+esc(r.User)+'</td><td class="code">'+esc(r.Operation_ID)+'</td></tr>';}).join('')+'</tbody></table></div>';
+      else if (historyTab === 'labels') html = '<div class="table-wrap"><table class="table"><thead><tr><th>Čas</th><th>Pack_ID</th><th>Akce</th><th>Formát</th><th>Uživatel</th><th>URL</th></tr></thead><tbody>'+list.map(function(r){return '<tr><td>'+esc(date(r.Timestamp))+'</td><td><button class="btn btn-ghost btn-small code" data-action="detail" data-id="'+esc(r.Pack_ID)+'">'+esc(r.Pack_ID)+'</button></td><td>'+esc(r.Action)+'</td><td>'+esc(r.Label_Format)+'</td><td>'+esc(r.User)+'</td><td class="subtext">'+esc(r.App_Base_URL)+'</td></tr>';}).join('')+'</tbody></table></div>';
+      else html = '<div class="table-wrap"><table class="table"><thead><tr><th>Zahájeno</th><th>Typ</th><th>Entita</th><th>Stav</th><th>Požadavek od</th><th>Chyba / obnova</th></tr></thead><tbody>'+list.map(function(r){return '<tr><td>'+esc(date(r.Started_At))+'</td><td>'+esc(r.Operation_Type)+'</td><td class="code">'+esc(r.Entity_ID||'—')+'</td><td>'+status(r.Status)+'</td><td>'+esc(r.Requested_By)+'</td><td>'+esc(r.Error_Code||'')+' '+esc(r.Error_Message||'')+'</td></tr>';}).join('')+'</tbody></table></div>';
+      target.innerHTML = html;
+    } catch(err) { target.innerHTML = notice(err.message,'error'); }
+  }
+
+  function renderSettings() {
+    const canConfig = ['ADMIN','VEDOUCI'].indexOf(boot.actor.role) >= 0;
+    if (!canConfig) return setPageContent(notice('Nastavení je dostupné pouze rolím ADMIN a VEDOUCI.','error'));
+    const url = boot.qr.appBaseUrlConfigured ? 'Nastaveno' : 'Chybí';
+    setPageContent(pageHead('KONFIGURACE PROVOZU', 'Nastavení', 'Změny QR URL mají vliv na nové štítky. Již vytištěné QR používají stejnou deployment adresu.') +
+      '<section class="card"><div class="card-head"><span class="card-title">QR a produkční URL</span><span class="tag ' + (boot.qr.appBaseUrlConfigured?'tag-good':'tag-warn') + '">' + url + '</span></div><form id="settings-form" class="card-body"><div class="field"><label for="setting-url">APP_BASE_URL</label><input class="input" id="setting-url" name="url" type="url" required placeholder="https://script.google.com/macros/s/…/exec"><span class="field-hint">Vložte skutečnou produkční URL končící /exec, ne testovací /dev.</span></div><div class="field" style="margin-top:14px"><label for="setting-format">Výchozí formát štítku</label><select class="input" id="setting-format" name="format"><option value="50x30mm">50 × 30 mm</option><option value="60x40mm">60 × 40 mm</option></select></div><div class="field" style="margin-top:14px"><label for="setting-camera">Vnitřní skener kamery</label><select class="input" id="setting-camera" name="camera"><option value="FALSE">Vypnuto — doporučeno při prvním nasazení</option><option value="TRUE">Zapnuto — pouze po testu zařízení</option></select><span class="field-hint">Nativní fotoaparát telefonu a ruční Pack_ID zůstávají dostupné bez ohledu na tuto volbu.</span></div><div class="form-actions"><button class="btn btn-primary" type="submit">Uložit nastavení</button></div></form></section>' +
+      '<section class="card" style="margin-top:16px"><div class="card-head"><span class="card-title">Kontrola oprávnění</span></div><div class="card-body"><p><b>Google účet:</b> ' + esc(boot.actor.email) + '</p><p><b>Role:</b> ' + esc(boot.actor.role) + '</p><p class="subtext">Uživatelé a role se spravují výhradně v listu DB_UZIVATELE. Přihlášení v prohlížeči roli nezvyšuje.</p></div></section>');
+    const f = document.getElementById('settings-form');
+    if (f) {
+      f.elements.format.value = boot.qr.labelFormat;
+      f.elements.camera.value = boot.qr.cameraScannerEnabled ? 'TRUE' : 'FALSE';
+      f.elements.url.value = '';
+    }
+  }
+
+  function showPrintLabel(label) {
+    const p = label.pack;
+    const printRoot = document.getElementById('label-print');
+    printRoot.innerHTML = '<div class="label-sheet"><div class="label-qr" id="label-qr"></div><div class="label-info"><div class="label-name">' + esc(label.surovinaName) + '</div><div class="label-lot">LOT ' + esc(p.Lot) + '<br>EXP ' + esc(p.Expirace_MMYY) + '</div></div><div style="display:none"></div></div><div style="height:0;overflow:hidden"><span id="label-id-measure"></span></div>';
+    const target = document.getElementById('label-qr');
+    try {
+      new QRCode(target, {text:label.payload,width:260,height:260,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+    } catch (err) { toast('QR se nepodařilo vykreslit: ' + err.message,'error'); return; }
+    target.parentNode.insertAdjacentHTML('beforeend','<div class="label-id">' + esc(p.Pack_ID) + '</div>');
+    setTimeout(function () { window.print(); }, 350);
+  }
+
+  app.addEventListener('click', async function (event) {
+    const button = event.target.closest('[data-action]');
+    if (!button || pending) return;
+    const action = button.getAttribute('data-action');
+    const id = button.getAttribute('data-id') || '';
+    try {
+      if (action === 'navigate') { setRoute(button.getAttribute('data-route') || '/'); return; }
+      if (action === 'detail') { setRoute('/pack/' + encodeURIComponent(id)); return; }
+      if (action === 'move') { setRoute('/move/' + encodeURIComponent(id)); return; }
+      if (action === 'history-tab') { historyTab = button.getAttribute('data-tab') || 'movements'; await loadHistory(); return; }
+      if (action === 'history-filter') { await loadHistory(); return; }
+      if (action === 'empty-pack') {
+        if (!confirm('Potvrzujete, že je pack ' + id + ' fyzicky vyprázdněný? Tuto změnu nelze běžně vrátit.')) return;
+        pending = true; button.disabled = true;
+        const result = await callApi('apiEmptyPack',id,opKey());
+        toast(result.duplicate ? 'Toto potvrzení už bylo zpracováno.' : 'Vyprázdnění potvrzeno a zapsáno do auditu.','success');
+        await renderPackDetail(id);
+      }
+      if (action === 'print-label' || action === 'reprint-label') {
+        pending = true; button.disabled = true;
+        const result = await callApi('apiRequestPackLabel',id,action === 'reprint-label');
+        if (!result.ok) throw new Error(result.error);
+        showPrintLabel(result.label);
+      }
+    } catch(err) { toast(err.message || String(err),'error'); }
+    finally { pending = false; }
+  });
+
+  app.addEventListener('submit', async function (event) {
+    const form = event.target;
+    if (!form || !form.id) return;
+    event.preventDefault();
+    if (pending) return;
+    const fd = new FormData(form);
+    const val = function(name) { return String(fd.get(name) || '').trim(); };
+    const button = form.querySelector('button[type="submit"]');
+    try {
+      pending = true; if (button) button.disabled = true;
+      if (form.id === 'receive-form') {
+        const message = document.getElementById('receive-message');
+        if (message) message.innerHTML = loading('Ověřuji data a zapisuji příjem…');
+        const result = await callApi('apiReceivePack',{surovinaId:val('surovinaId'),lot:val('lot'),expiry:val('expiry'),weight:val('weight'),unit:val('unit'),box:val('box'),position:val('position')},opKey());
+        const entityId = result.entityId || (result.data && result.data.pack && result.data.pack.Pack_ID);
+        if (!entityId) throw new Error('Server potvrdil požadavek, ale nevrátil Pack_ID. Zkontrolujte OPERATIONS_LOG.');
+        toast(result.duplicate ? 'Příjem už byl zpracován.' : 'Pack přijat: ' + entityId,'success');
+        setRoute('/pack/' + encodeURIComponent(entityId));
+      } else if (form.id === 'move-form') {
+        const id = form.getAttribute('data-id');
+        const result = await callApi('apiMovePack',id,{box:val('box'),position:val('position'),note:val('note')},opKey());
+        toast(result.duplicate ? 'Přesun už byl zpracován.' : 'Přesun uložen a auditován.','success');
+        setRoute('/pack/' + encodeURIComponent(id));
+      } else if (form.id === 'scan-form') {
+        setRoute('/pack/' + encodeURIComponent(val('id').toUpperCase()));
+      } else if (form.id === 'use-pack-form') {
+        const id = currentRoute.slice(6);
+        const result = await callApi('apiMarkPackUsed',id,val('planId'),opKey());
+        toast(result.duplicate ? 'Použití už bylo zpracováno.' : 'Použití packu bylo potvrzeno.','success');
+        await renderPackDetail(id);
+      } else if (form.id === 'settings-form') {
+        const url = val('url');
+        const format = val('format');
+        const camera = val('camera');
+        if (url) await callApi('apiUpdateConfig',{key:'APP_BASE_URL',value:url});
+        await callApi('apiUpdateConfig',{key:'QR_LABEL_FORMAT_DEFAULT',value:format});
+        await callApi('apiUpdateConfig',{key:'QR_ENABLE_CAMERA_SCANNER',value:camera});
+        const refreshed = await callApi('apiBootstrap');
+        boot.qr = refreshed.qr;
+        toast('Nastavení uloženo. Nová URL se použije pro nové QR štítky.','success');
+        renderShell();
+      }
+    } catch(err) {
+      const message = document.getElementById('receive-message');
+      if (message && form.id === 'receive-form') message.innerHTML = notice(err.message,'error');
+      else toast(err.message || String(err),'error');
+    } finally { pending = false; if (button && button.isConnected) button.disabled = false; }
+  });
+
+  app.addEventListener('input', function(event) {
+    if (currentRoute !== '/packs' || !event.target || !['pack-query','pack-box'].includes(event.target.id)) return;
+    clearTimeout(window.__packSearchTimer);
+    window.__packSearchTimer = setTimeout(loadPackRows, 300);
+  });
+  app.addEventListener('change', function(event) {
+    if (currentRoute === '/packs' && event.target && ['pack-status','pack-position'].includes(event.target.id)) loadPackRows();
+  });
+  window.addEventListener('hashchange', function() {
+    currentRoute = routeFromHash();
+    renderShell();
+  });
+
+  callApi('apiBootstrap').then(function (result) {
+    boot = result;
+    if (window.APP_INITIAL_VIEW === 'pack' && window.APP_INITIAL_PACK_ID) currentRoute = '/pack/' + encodeURIComponent(window.APP_INITIAL_PACK_ID);
+    else currentRoute = routeFromHash();
+    renderShell();
+  }).catch(showAccessDenied);
+})();
+</script>
