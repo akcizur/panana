@@ -34,6 +34,8 @@ function safeQrPayload_(id) {
 }
 
 function receivePack_(input, operationKey) {
+  // Do not create a pack that cannot receive a stable QR deeplink.
+  validateAppBaseUrl_(configValue_('APP_BASE_URL'));
   const data = {
     Surovina_ID: requiredText_(input && input.surovinaId, 'Surovina', 100),
     Lot: requiredText_(input && input.lot, 'Lot', 100),
@@ -46,8 +48,6 @@ function receivePack_(input, operationKey) {
   const material = findRecord_('DB_SUROVINY', 'Surovina_ID', data.Surovina_ID);
   if (!material || !boolValue_(material.Aktivni)) throw appError_('Surovina neexistuje nebo není aktivní.', 'VALIDATION_ERROR');
   return withOperation_('PRIJEM_PACKU', operationKey, data, function(ctx) {
-    const yy = Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, 'yy');
-    const counter = findRecordByYear_('PACK', Number(yy));
     const packId = reservePackIdLocked_();
     const now = new Date();
     const pack = {
