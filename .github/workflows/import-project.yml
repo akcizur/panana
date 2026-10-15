@@ -1,0 +1,50 @@
+name: Import project archive
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    if: startsWith(github.event.issue.title, 'IMPORT FULL SOURCE 1.6.0')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging commit
+        uses: actions/checkout@v4
+
+      - name: Restore project files
+        shell: bash
+        env:
+          PROJECT_PACKAGE: ${{ runner.temp }}/project/package.json
+        run: |
+          set -euo pipefail
+          cat .import/part* | base64 --decode > "$RUNNER_TEMP/panana.tar.xz"
+          mkdir -p "$RUNNER_TEMP/project"
+          tar -xJf "$RUNNER_TEMP/panana.tar.xz" -C "$RUNNER_TEMP/project"
+          test -f "$RUNNER_TEMP/project/package.json"
+          node -e "const p=require(process.env.PROJECT_PACKAGE); if (!p.scripts || !p.scripts.dev || !p.scripts.build) process.exit(2)"
+
+      - name: Install project into repository root
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a "$RUNNER_TEMP/project/." .
+          rm -rf .import
+          rm -f .github/workflows/import-project.yml
+
+      - name: Commit imported source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes detected."
+            exit 0
+          fi
+          git commit -m "Import SKLAD/VÝROBA Retro Edition 1.6.0"
+          git push origin HEAD:main
