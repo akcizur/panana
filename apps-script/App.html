@@ -292,7 +292,7 @@
     return boot.positions.map(function(p){return '<option value="' + esc(p.position) + '" ' + (p.position===selected?'selected':'') + '>' + esc(p.position) + '</option>';}).join('');
   }
   function materialStockOptions(type) {
-    return boot.materialStocks.filter(function(s){return Number(s.Mnozstvi_Aktualni)>0 && (!type || s.Material_Type===type);}).map(function(s){
+    return boot.materialStocks.filter(function(s){return Number(s.Mnozstvi_Aktualni)>0 && (!type || type==='any' || s.Material_Type===type);}).map(function(s){
       return '<option value="' + esc(s.Stock_Material_ID) + '">' + esc(s.Material_Name) + ' · ' + esc(s.Stock_Material_ID) + ' · ' + esc(number(s.Mnozstvi_Aktualni)) + ' ' + esc(s.Jednotka) + '</option>';
     }).join('');
   }
@@ -426,11 +426,64 @@
       if (action === 'move') { setRoute('/move/' + encodeURIComponent(id)); return; }
       if (action === 'history-tab') { historyTab = button.getAttribute('data-tab') || 'movements'; await loadHistory(); return; }
       if (action === 'history-filter') { await loadHistory(); return; }
+      if (action === 'add-material-line') {
+        const containerId=button.getAttribute('data-container');
+        const container=document.getElementById(containerId);
+        if(!container)throw new Error('Řádek materiálu nelze přidat.');
+        const kind=button.getAttribute('data-type')||'any';
+        const wrapper=document.createElement('div');
+        wrapper.className='material-line-wrapper';
+        wrapper.innerHTML=materialLineEditor('material-line-'+Date.now(),kind)+'<button type="button" class="btn btn-small btn-danger" data-action="remove-material-line" style="margin-top:6px">Odebrat řádek</button>';
+        container.appendChild(wrapper);
+        return;
+      }
+      if (action === 'remove-material-line') {
+        const wrapper=button.closest('.material-line-wrapper');
+        if(wrapper)wrapper.remove();
+        return;
+      }
+      if (action === 'plan-status') {
+        pending=true; button.disabled=true;
+        const result=await callApi('apiUpdateProductionPlanStatus',button.getAttribute('data-plan-id'),button.getAttribute('data-status'),opKey());
+        toast(result.duplicate?'Změna stavu už byla zpracována.':'Stav výrobního plánu byl změněn.','success');
+        await refreshWorkspace();
+        return;
+      }
+      if (action === 'complete-operation') {
+        const type=button.getAttribute('data-type');
+        let actualCapsules='';
+        if(type==='KAPSLOVANI'){
+          const value=prompt('Zadejte skutečný počet vyrobených kapslí (ks):');
+          if(value===null)return;
+          actualCapsules=String(value).trim();
+          if(!actualCapsules||!Number.isFinite(Number(actualCapsules))||Number(actualCapsules)<=0)throw new Error('Zadejte platný počet kapslí.');
+        }
+        pending=true;button.disabled=true;
+        const result=await callApi('apiCompleteProductionOperation',{planId:button.getAttribute('data-plan-id'),operationId:button.getAttribute('data-operation-id'),actualCapsules:actualCapsules},opKey());
+        toast(result.duplicate?'Dokončení operace už bylo zpracováno.':'Operace '+productionOperationLabel(type)+' byla dokončena.','success');
+        await refreshWorkspace();
+        return;
+      }
+      if (action === 'packaging-status') {
+        pending=true;button.disabled=true;
+        const result=await callApi('apiUpdatePackagingPlanStatus',button.getAttribute('data-plan-id'),button.getAttribute('data-status'),opKey());
+        toast(result.duplicate?'Změna stavu už byla zpracována.':'Stav plánu balení změněn.','success');
+        await refreshWorkspace();
+        return;
+      }
+      if (action === 'labeling-status') {
+        pending=true;button.disabled=true;
+        const result=await callApi('apiUpdateLabelingPlanStatus',button.getAttribute('data-plan-id'),button.getAttribute('data-status'),opKey());
+        toast(result.duplicate?'Změna stavu už byla zpracována.':'Stav etiketování změněn.','success');
+        await refreshWorkspace();
+        return;
+      }
       if (action === 'empty-pack') {
         if (!confirm('Potvrzujete, že je pack ' + id + ' fyzicky vyprázdněný? Tuto změnu nelze běžně vrátit.')) return;
         pending = true; button.disabled = true;
         const result = await callApi('apiEmptyPack',id,opKey());
         toast(result.duplicate ? 'Toto potvrzení už bylo zpracováno.' : 'Vyprázdnění potvrzeno a zapsáno do auditu.','success');
+        await refreshWorkspace();
         await renderPackDetail(id);
       }
       if (action === 'print-label' || action === 'reprint-label') {
