@@ -54,3 +54,18 @@ function listFinishedStock_(){
     return out;
   }).sort(function(a,b){return String(b.Updated_At).localeCompare(String(a.Updated_At));});
 }
+
+function listHandovers_(){
+  const entries=records_('PREDANI_EXPEDICI');
+  const items=records_('PREDANI_EXPEDICI_POLOZKY');
+  return entries.map(function(entry){
+    const out=publicRecord_(entry);
+    out.Items=items.filter(function(item){return item.Predani_ID===entry.Predani_ID;}).map(function(item){
+      const row=publicRecord_(item),product=findRecord_('DB_PRODUKTY','Produkt_ID',item.Produkt_ID);
+      row.Product_Name=product?String(product.Nazev_Produktu):String(item.Produkt_ID);
+      return row;
+    });
+    out.Item_Count=out.Items.reduce(function(sum,item){return sum+Number(item.Pocet_Baleni||0);},0);
+    return out;
+  }).sort(function(a,b){return new Date(b.Timestamp).getTime()-new Date(a.Timestamp).getTime();}).slice(0,100);
+}
