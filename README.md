@@ -1,58 +1,33 @@
-# SKLAD/VÝROBA · Retro Edition 1.6.0
+# Panana — sklad a výroba
 
-Skladová a výrobní demo aplikace v černobílém retro-industrial stylu s oranžovým akcentem.
+Panana má dvě oddělené části. **Produkční implementace v2** je Google Sheets + Google Apps Script. Původní React/Vite aplikace v kořeni repozitáře zůstává pouze jako vizuální demo/prototyp a není autoritativním zdrojem provozních dat.
 
-## Opravy ve verzi 1.6.0
+## Produkční aplikace
 
-- Přidána přihlašovací obrazovka s demo účty, kontrolou přihlašovacích údajů, chybovou hláškou a odhlášením.
-- Role se načte ze session a nelze ji přepínat volným selectem v navigaci nebo nastavení.
-- Hmotnosti packů, příjem, detaily a pohyby jsou konzistentně v gramech. Seed hodnoty byly převedeny z kg na g; například 20 kg → 20 000 g.
-- Nastavení konfigurace lze uložit pouze v rolích ADMIN a VEDOUCI; ostatní role nemají odkaz na nastavení.
-- Zvětšené popisky a ovládací prvky, přehlednější tabulky a responzivní přihlášení.
-- Přidána česká metadata, vlastní favicon a příkazy pro typecheck.
+- [Produkční specifikace v2](docs/PRODUCTION-SPEC-V2.md) — požadavky, přesná schémata všech listů, stavy, QR, audit a akceptační testy.
+- [Stav implementace a blokery před produkcí](docs/IMPLEMENTATION-STATUS.md)
+- [Projektový chat log](docs/CHAT-LOG.md) — dohledatelné požadavky a rozhodnutí.
+- [Nasazení Apps Script](apps-script/README.md)
 
-## Automatický build a deploy na GitHub Pages
+Produkční backend nevyžaduje Vercel, Convex, Clerk, externí server, externí QR API ani placený hosting. Pro provoz používá Google Sheets a autorizovaný Apps Script web deployment.
 
-Každý push do větve `main` automaticky spustí GitHub Actions:
+## Zásadní bezpečnostní upozornění
 
-1. Instalace závislostí pomocí pnpm s uzamčeným lockfilem.
-2. Kontrola TypeScriptu (`pnpm typecheck`).
-3. Produkční build (`pnpm build`) s base cestou `/panana/`.
-4. Nasazení sestaveného artefaktu na GitHub Pages.
+**Nevkládejte reálné skladové údaje do veřejného GitHub Pages dema.** Původní Vite aplikace je klientská ukázka a její role/demo stavy nejsou bezpečnostní hranicí. Produkční přístup kontroluje identitu a roli na Apps Script serveru. Pokud Google neposkytne ověřenou identitu, API musí požadavek odmítnout.
 
-Veřejná adresa: https://akcizur.github.io/panana/
+Zdroj v GitHubu se sám nepovažuje za live deployment. Produkční nasazení vyžaduje Google Sheet, autorizaci, nastavené uživatele, omezené sdílení a ověřené testy v reálném Google účtu.
 
-Workflow lze spustit také ručně v záložce **Actions** pomocí **Run workflow**. Zdrojové soubory zůstávají v `main`; sestavení se nasazuje jako Pages artefakt, není potřeba commitovat složku `dist`.
+## Lokální Vite preview
 
-## Spuštění
+Požadavky: Node.js 22 a pnpm.
 
-Vyžaduje Node.js 22 a pnpm:
-
-```bash
-pnpm install
+<pre><code>pnpm install
 pnpm dev
-```
-
-Kontrola a produkční build:
-
-```bash
 pnpm typecheck
-pnpm build
-pnpm preview
-```
+pnpm build</code></pre>
 
-## Demo přístupy
+GitHub Pages workflow zůstává pouze pro preview. Není to server Apps Scriptu a nesynchronizuje skladová data.
 
-Na přihlašovací obrazovce otevři „Zobrazit demo účty“ a vyber roli. Přihlašovací údaje jsou pouze demonstrační.
+## Produkční zdrojový kód
 
-| Role | E-mail | Heslo |
-| --- | --- | --- |
-| ADMIN | `admin@sklad.local` | `Retro2026!` |
-| VEDOUCI | `vedouci@sklad.local` | `Vedouci2026!` |
-| SKLAD | `sklad@sklad.local` | `Sklad2026!` |
-| VYROBA | `vyroba@sklad.local` | `Vyroba2026!` |
-| READONLY | `host@sklad.local` | `Demo2026!` |
-
-## Bezpečnostní upozornění
-
-Přihlášení je klientská demo funkce, nikoli zabezpečení. Hesla jsou součástí klientského kódu a lze je obejít. Pro produkční provoz je nutné použít backend, serverovou autorizaci, bezpečné ukládání hesel, session cookies a trvalé úložiště.
+Soubory v <code>apps-script/</code> obsahují serverové služby, HTML partials a lokálně přibalený QR generátor. CI kontroluje syntaxi Apps Scriptu a JavaScriptu; kontrola syntaktické správnosti sama o sobě necertifikuje Google oprávnění, reálný tisk ani chování při částečném selhání Sheets.
