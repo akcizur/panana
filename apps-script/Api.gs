@@ -61,6 +61,11 @@ function apiMovePack(packId, input, idempotencyKey) {
   return movePack_(packId, input || {}, idempotencyKey, actor);
 }
 
+function apiPlanPackForProduction(packId, planId, idempotencyKey) {
+  requireAction_('pack_use');
+  return planPackForProduction_(packId, planId, idempotencyKey);
+}
+
 function apiMarkPackUsed(packId, planId, idempotencyKey) {
   requireAction_('pack_use');
   return markPackUsed_(packId, planId, idempotencyKey);
