@@ -372,3 +372,19 @@ select.input { background-image: linear-gradient(45deg,transparent 50%,var(--ui-
   .auth-theme-toggle { position: relative; top: auto; right: auto; justify-self: start; margin-bottom: 18px; }
 }
 
+/* PANANA mobile light navigation consistency */
+@media (max-width: 1023px) {
+  .app-shell[data-theme="light"] .sidebar { background: var(--ui-sidebar) !important; color: var(--ui-text); border-bottom-color: var(--ui-border); }
+  .app-shell[data-theme="light"] .sidebar-brand { border-bottom-color: var(--ui-border); background: var(--ui-sidebar); }
+  .app-shell[data-theme="light"] .brand-mark-small { color: var(--ui-text) !important; }
+  .app-shell[data-theme="light"] .sidebar-sub,
+  .app-shell[data-theme="light"] .sidebar-status,
+  .app-shell[data-theme="light"] .sidebar-bottom-label,
+  .app-shell[data-theme="light"] .sidebar-version { color: var(--ui-muted); }
+  .app-shell[data-theme="light"] .nav a { background: var(--ui-surface-muted); color: #626d60; }
+  .app-shell[data-theme="light"] .nav a span { color: #929a8d; }
+  .app-shell[data-theme="light"] .nav a:hover { background: var(--ui-hover); color: var(--ui-text); }
+  .app-shell[data-theme="light"] .nav a[aria-current="page"] { background: var(--ui-accent); color: var(--ui-accent-ink); }
+  .app-shell[data-theme="light"] .nav a[aria-current="page"] span { color: #444b31; }
+}
+
