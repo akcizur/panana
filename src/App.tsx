@@ -3,6 +3,7 @@ import { ROLE_USERS, StoreProvider, useStore, type Perm, type Role } from "./sto
 import { Baleni, Historie, Hotove, Nastaveni, Vyroba } from "./screens2";
 import { Dashboard, Detail, Prijem, Scan, Sklad } from "./screens1";
 
+type Theme = "light" | "dark";
 type NavEntry = { path: string; number: string; label: string; permission?: Perm | "config" };
 const NAV: NavEntry[] = [
   { path: "#/", number: "01", label: "Přehled" },
@@ -34,7 +35,12 @@ function getSessionRole(): Role | null {
   } catch { return null; }
 }
 
-function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
+function ThemeToggle({ theme, onToggle, className = "" }: { theme: Theme; onToggle: () => void; className?: string }) {
+  const nextLabel = theme === "light" ? "Zapnout tmavý režim" : "Zapnout světlý režim";
+  return <button type="button" className={`theme-toggle ${className}`} onClick={onToggle} aria-label={nextLabel} title={nextLabel} aria-pressed={theme === "dark"}><span className="theme-toggle-icon" aria-hidden="true">{theme === "light" ? "☾" : "☀"}</span><span className="theme-toggle-label">{theme === "light" ? "Tmavý režim" : "Světlý režim"}</span></button>;
+}
+
+function LoginScreen({ onLogin, theme, onToggleTheme }: { onLogin: (role: Role) => void; theme: Theme; onToggleTheme: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -52,8 +58,9 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
   };
 
   return (
-    <main className="auth-shell">
+    <main className="auth-shell" data-theme={theme}>
       <div className="auth-grain" aria-hidden="true" />
+      <ThemeToggle theme={theme} onToggle={onToggleTheme} className="auth-theme-toggle" />
       <section className="auth-layout">
         <div className="auth-intro">
           <div className="brand-mark"><span>SKLAD</span><b>/</b><span>VÝROBA</span><i>®</i></div>
@@ -108,7 +115,7 @@ function useHash() {
   return hash;
 }
 
-function Shell({ onLogout }: { onLogout: () => void }) {
+function Shell({ onLogout, theme, onToggleTheme }: { onLogout: () => void; theme: Theme; onToggleTheme: () => void }) {
   const { s, can } = useStore();
   const hash = useHash();
   const route = hash.replace(/^#/, "");
@@ -142,7 +149,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   else if (route.startsWith("/nastaveni")) page = <Nastaveni />;
   else page = <Dashboard />;
 
-  return <div className="app-shell grid min-h-screen lg:grid-cols-[248px_1fr]">
+  return <div className="app-shell grid min-h-screen lg:grid-cols-[256px_minmax(0,1fr)]" data-theme={theme}>
     <aside className="sidebar bg-ink text-stock lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto">
       <div className="sidebar-brand px-[18px] py-4">
         <div className="brand-mark brand-mark-small"><span>SKLAD</span><b>/</b><span>VÝROBA</span></div>
@@ -162,7 +169,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
       <div className="mx-auto max-w-[1360px]">
         <div className="account-bar">
           <div className="workspace-label"><span className="workspace-symbol">✳</span><div><strong>PROVOZNÍ PŘEHLED</strong><small>INTERNÍ SKLADOVÝ SYSTÉM</small></div></div>
-          <div className="account-controls"><div className="account-avatar">{s.user.split(" ").map((part) => part[0]).slice(0, 2).join("")}</div><div className="account-label"><strong>{s.user}</strong><span>{s.role}</span></div><button onClick={onLogout} className="logout-button"><span>Odhlásit</span><b>↗</b></button></div>
+          <div className="account-controls"><div className="account-avatar">{s.user.split(" ").map((part) => part[0]).slice(0, 2).join("")}</div><div className="account-label"><strong>{s.user}</strong><span>{s.role}</span></div><ThemeToggle theme={theme} onToggle={onToggleTheme} /><button onClick={onLogout} className="logout-button"><span>Odhlásit</span><b>↗</b></button></div>
         </div>
         {page}
         <footer className="app-footer mono mt-12 border-t border-line pt-4 uppercase"><span>Demo s lokálními daty · QR se generuje v prohlížeči</span><span>Hmotnost vždy v gramech (g) · Účet: {s.role}</span></footer>
@@ -174,6 +181,17 @@ function Shell({ onLogout }: { onLogout: () => void }) {
 function AuthGate() {
   const { setRole } = useStore();
   const [authenticatedRole, setAuthenticatedRole] = useState<Role | null>(getSessionRole);
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      const saved = window.localStorage.getItem("panana-theme");
+      return saved === "dark" || saved === "light" ? saved : "light";
+    } catch { return "light"; }
+  });
+  const toggleTheme = () => setTheme((current) => {
+    const next: Theme = current === "light" ? "dark" : "light";
+    try { window.localStorage.setItem("panana-theme", next); } catch { /* local storage is optional */ }
+    return next;
+  });
   const login = (role: Role) => {
     setRole(role);
     try { window.sessionStorage.setItem("sklad-auth-role", role); } catch { /* session storage is optional */ }
@@ -185,7 +203,7 @@ function AuthGate() {
     window.location.hash = "#/";
     window.scrollTo(0, 0);
   };
-  return authenticatedRole ? <Shell onLogout={logout} /> : <LoginScreen onLogin={login} />;
+  return authenticatedRole ? <Shell onLogout={logout} theme={theme} onToggleTheme={toggleTheme} /> : <LoginScreen onLogin={login} theme={theme} onToggleTheme={toggleTheme} />;
 }
 
 export default function App() {
