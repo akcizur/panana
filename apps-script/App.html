@@ -14,6 +14,14 @@
     { route:'/receive', icon:'＋', label:'Příjem packu', roles:['ADMIN','VEDOUCI','SKLAD'] },
     { route:'/packs', icon:'▤', label:'Sklad surovin', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/scan', icon:'⌗', label:'Skenovat pack', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/production', icon:'⚗', label:'Výroba', roles:['ADMIN','VEDOUCI','VYROBA'] },
+    { route:'/recipes', icon:'≋', label:'Receptury', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/materials', icon:'▦', label:'Suroviny a obaly', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/semi-finished', icon:'▧', label:'Polotovary', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/packaging', icon:'□', label:'Balení', roles:['ADMIN','VEDOUCI','VYROBA'] },
+    { route:'/finished', icon:'▣', label:'Hotové výrobky', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
+    { route:'/labeling', icon:'▤', label:'Etiketování', roles:['ADMIN','VEDOUCI','VYROBA'] },
+    { route:'/handover', icon:'⇢', label:'Předání expedici', roles:['ADMIN','VEDOUCI'] },
     { route:'/history', icon:'↺', label:'Historie', roles:['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'] },
     { route:'/settings', icon:'⚙', label:'Nastavení', roles:['ADMIN','VEDOUCI'] }
   ];
@@ -32,8 +40,8 @@
     return Number(value || 0).toLocaleString('cs-CZ', {maximumFractionDigits:3});
   }
   function status(value) {
-    const labels = {NOVY:'Nový',OTEVRENY:'Otevřený',VYPRAZDNENY:'Vyprázdněný',NAPLANOVANO:'Naplánováno',PRIPRAVENO:'Připraveno',PROBIHA:'Probíhá',POZASTAVENO:'Pozastaveno',DOKONCENO:'Dokončeno',ZRUSENO:'Zrušeno'};
-    const cls = value === 'NOVY' || value === 'NAPLANOVANO' ? 'tag-new' : value === 'OTEVRENY' || value === 'PROBIHA' ? 'tag-open' : value === 'VYPRAZDNENY' || value === 'DOKONCENO' ? 'tag-empty' : 'tag-warn';
+    const labels = {NOVY:'Nový',OTEVRENY:'Otevřený',VYPRAZDNENY:'Vyprázdněný',NAPLANOVANO:'Naplánováno',PRIPRAVENO:'Připraveno',PRIPRAVEN:'Připravený',SPOTREBOVANY:'Spotřebovaný',CEKA_ETYKETU:'Čeká na etiketu',PRIPRAVENO_K_PREDANI:'Připraveno k předání',PREDANO_EXPEDICI:'Předáno expedici',PROBIHA:'Probíhá',POZASTAVENO:'Pozastaveno',DOKONCENO:'Dokončeno',ZRUSENO:'Zrušeno'};
+    const cls = value === 'NOVY' || value === 'NAPLANOVANO' || value === 'PRIPRAVEN' ? 'tag-new' : value === 'OTEVRENY' || value === 'PROBIHA' ? 'tag-open' : value === 'VYPRAZDNENY' || value === 'DOKONCENO' || value === 'SPOTREBOVANY' || value === 'PREDANO_EXPEDICI' ? 'tag-empty' : value === 'PRIPRAVENO_K_PREDANI' ? 'tag-good' : value === 'CEKA_ETYKETU' ? 'tag-warn' : 'tag-warn';
     return '<span class="tag ' + cls + '">' + esc(labels[value] || value || '—') + '</span>';
   }
   function toast(message, kind) {
@@ -108,13 +116,23 @@
   function renderCurrent() {
     if (!boot) return;
     document.querySelectorAll('.nav button').forEach(function (btn) { btn.setAttribute('aria-current', btn.getAttribute('data-route') === currentRoute ? 'page' : 'false'); });
-    const titles = {'/':'Přehled','/receive':'Příjem packu','/packs':'Sklad surovin','/scan':'Skenovat pack','/history':'Historie','/settings':'Nastavení'};
+    const titles = {'/':'Přehled','/receive':'Příjem packu','/packs':'Sklad surovin','/scan':'Skenovat pack','/production':'Výroba','/recipes':'Receptury','/materials':'Suroviny a obaly','/semi-finished':'Polotovary','/packaging':'Balení','/finished':'Hotové výrobky','/labeling':'Etiketování','/handover':'Předání expedici','/history':'Historie','/settings':'Nastavení'};
     const title = currentRoute.indexOf('/pack/') === 0 ? 'Detail packu' : currentRoute.indexOf('/move/') === 0 ? 'Přesun packu' : (titles[currentRoute] || 'Sklad a výroba');
     const crumb = document.getElementById('crumb-title'); if (crumb) crumb.textContent = title;
+    const need = {'/receive':['ADMIN','VEDOUCI','SKLAD'],'/production':['ADMIN','VEDOUCI','VYROBA'],'/recipes':['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'],'/packaging':['ADMIN','VEDOUCI','VYROBA'],'/semi-finished':['ADMIN','VEDOUCI','SKLAD','VYROBA','READONLY'],'/labeling':['ADMIN','VEDOUCI','VYROBA'],'/handover':['ADMIN','VEDOUCI'],'/settings':['ADMIN','VEDOUCI']};
+    if (need[currentRoute] && need[currentRoute].indexOf(boot.actor.role)<0) return setPageContent(notice('Vaše role nemá oprávnění pro tuto obrazovku. Přístupové kontroly se zároveň provádějí na serveru.','error'));
     if (currentRoute === '/') return renderDashboard();
     if (currentRoute === '/receive') return renderReceive();
     if (currentRoute === '/packs') return renderPacks();
     if (currentRoute === '/scan') return renderScan();
+    if (currentRoute === '/production') return renderProduction();
+    if (currentRoute === '/recipes') return renderRecipes();
+    if (currentRoute === '/materials') return renderMaterials();
+    if (currentRoute === '/semi-finished') return renderSemiFinished();
+    if (currentRoute === '/packaging') return renderPackaging();
+    if (currentRoute === '/finished') return renderFinished();
+    if (currentRoute === '/labeling') return renderLabeling();
+    if (currentRoute === '/handover') return renderHandover();
     if (currentRoute === '/history') return renderHistory();
     if (currentRoute === '/settings') return renderSettings();
     if (currentRoute.indexOf('/move/') === 0) return renderMove(decodeURIComponent(currentRoute.slice(6)));
@@ -137,6 +155,7 @@
         stat('Probíhající výroba',s.plansRunning,'Stav z PLAN_VYROBY') +
         stat('Čeká na etiketu',s.waitingLabel,'Hotové skladové řádky') +
         stat('Připraveno k předání',s.readyHandover,'Poslední interní krok') +
+        stat('Expirace do 2 měsíců',s.expiring,'Aktivní packy stejné suroviny se nepočítají do hmotnostní bilance') +
       '</section>' +
       '<div class="grid grid-two">' +
         card('Rychlé akce','<div class="card-body"><div class="grid"><button class="btn btn-primary" data-action="navigate" data-route="/receive">＋ Příjem nového packu</button><button class="btn" data-action="navigate" data-route="/scan">⌗ Otevřít pack přes QR / ID</button><button class="btn" data-action="navigate" data-route="/packs">Zobrazit sklad surovin →</button><button class="btn" data-action="navigate" data-route="/history">Otevřít historii pohybů →</button></div></div>') +
@@ -245,29 +264,180 @@
   }
 
   function renderSettings() {
-    const canConfig = ['ADMIN','VEDOUCI'].indexOf(boot.actor.role) >= 0;
-    if (!canConfig) return setPageContent(notice('Nastavení je dostupné pouze rolím ADMIN a VEDOUCI.','error'));
-    const url = boot.qr.appBaseUrlConfigured ? 'Nastaveno' : 'Chybí';
-    setPageContent(pageHead('KONFIGURACE PROVOZU', 'Nastavení', 'Změny QR URL mají vliv na nové štítky. Již vytištěné QR používají stejnou deployment adresu.') +
-      '<section class="card"><div class="card-head"><span class="card-title">QR a produkční URL</span><span class="tag ' + (boot.qr.appBaseUrlConfigured?'tag-good':'tag-warn') + '">' + url + '</span></div><form id="settings-form" class="card-body"><div class="field"><label for="setting-url">APP_BASE_URL</label><input class="input" id="setting-url" name="url" type="url" required placeholder="https://script.google.com/macros/s/…/exec"><span class="field-hint">Vložte skutečnou produkční URL končící /exec, ne testovací /dev.</span></div><div class="field" style="margin-top:14px"><label for="setting-format">Výchozí formát štítku</label><select class="input" id="setting-format" name="format"><option value="50x30mm">50 × 30 mm</option><option value="60x40mm">60 × 40 mm</option></select></div><div class="field" style="margin-top:14px"><label for="setting-camera">Vnitřní skener kamery</label><select class="input" id="setting-camera" name="camera"><option value="FALSE">Vypnuto — doporučeno při prvním nasazení</option><option value="TRUE">Zapnuto — pouze po testu zařízení</option></select><span class="field-hint">Nativní fotoaparát telefonu a ruční Pack_ID zůstávají dostupné bez ohledu na tuto volbu.</span></div><div class="form-actions"><button class="btn btn-primary" type="submit">Uložit nastavení</button></div></form></section>' +
-      '<section class="card" style="margin-top:16px"><div class="card-head"><span class="card-title">Kontrola oprávnění</span></div><div class="card-body"><p><b>Google účet:</b> ' + esc(boot.actor.email) + '</p><p><b>Role:</b> ' + esc(boot.actor.role) + '</p><p class="subtext">Uživatelé a role se spravují výhradně v listu DB_UZIVATELE. Přihlášení v prohlížeči roli nezvyšuje.</p></div></section>');
-    const f = document.getElementById('settings-form');
-    if (f) {
-      f.elements.format.value = boot.qr.labelFormat;
-      f.elements.camera.value = boot.qr.cameraScannerEnabled ? 'TRUE' : 'FALSE';
-      f.elements.url.value = '';
-    }
+    const canConfig=canRole(['ADMIN','VEDOUCI']);
+    if(!canConfig)return setPageContent(notice('Nastavení je dostupné pouze rolím ADMIN a VEDOUCI.','error'));
+    const urlState=boot.qr.appBaseUrlConfigured?'Nastaveno':'Chybí';
+    const userAdmin=boot.actor.role==='ADMIN';
+    const usersPanel=userAdmin?'<section class="card" style="margin-top:16px"><div class="card-head"><span class="card-title">Uživatelé a oprávnění</span><span class="tag">' + boot.users.length + ' účtů</span></div><div class="card-body"><form id="user-form"><div class="field-grid"><div class="field"><label>Google e-mail *</label><input class="input" name="email" type="email" required maxlength="254" placeholder="sklad@example.cz"><span class="field-hint">E-mail je identifikátor; existující účet upravíte výběrem níže.</span></div><div class="field"><label>Role *</label><select class="input" name="role"><option value="READONLY">READONLY – pouze čtení</option><option value="SKLAD">SKLAD</option><option value="VYROBA">VYROBA</option><option value="VEDOUCI">VEDOUCI</option><option value="ADMIN">ADMIN</option></select></div><div class="field"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="active" checked> Účet aktivní</label><span class="field-hint">Neaktivní uživatel nemá přístup k datům.</span></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">Uložit oprávnění</button><button class="btn" type="button" data-action="clear-user-form">Nový uživatel</button></div></form><div class="table-wrap" style="margin-top:18px"><table class="table"><thead><tr><th>Google účet</th><th>Role</th><th>Stav</th><th></th></tr></thead><tbody>' + boot.users.map(function(u){return '<tr><td>' + esc(u.Email) + '</td><td>' + esc(u.Role) + '</td><td>' + (u.Aktivni?'<span class="tag tag-good">Aktivní</span>':'<span class="tag tag-danger">Neaktivní</span>') + '</td><td><button class="btn btn-small" data-action="edit-user" data-email="' + esc(u.Email) + '">Upravit</button></td></tr>';}).join('') + '</tbody></table></div><p class="field-hint" style="margin-top:12px">Aplikace nezpřístupňuje anonymní režim. Pokud Apps Script neumí určit identitu uživatele, přístup odmítne.</p></div></section>':'<section class="card" style="margin-top:16px"><div class="card-head"><span class="card-title">Uživatelé a oprávnění</span></div><div class="card-body"><p class="subtext">Správu uživatelů může měnit pouze ADMIN.</p></div></section>';
+    setPageContent(pageHead('KONFIGURACE PROVOZU','Nastavení','Změny QR URL mohou ovlivnit už vytištěné štítky. Existující deployment aktualizujte, místo vytváření nové URL.','') +
+      '<section class="card"><div class="card-head"><span class="card-title">QR a produkční URL</span><span class="tag ' + (boot.qr.appBaseUrlConfigured?'tag-good':'tag-warn') + '">' + urlState + '</span></div><form id="settings-form" class="card-body"><div class="field"><label for="setting-url">APP_BASE_URL</label><input class="input" id="setting-url" name="url" type="url" placeholder="https://script.google.com/macros/s/…/exec"><span class="field-hint">První konfigurace: vložte aktuální produkční URL končící /exec. Pokud URL již existuje, pole nechte prázdné; její změna po příjmu packů je blokovaná kvůli QR migraci.</span></div><div class="field" style="margin-top:14px"><label for="setting-format">Výchozí formát štítku</label><select class="input" id="setting-format" name="format"><option value="50x30mm">50 × 30 mm</option><option value="60x40mm">60 × 40 mm</option></select></div><div class="field" style="margin-top:14px"><label for="setting-camera">Vnitřní skener kamery</label><select class="input" id="setting-camera" name="camera"><option value="FALSE">Vypnuto — doporučeno při prvním nasazení</option><option value="TRUE">Zapnuto — pouze po testu zařízení</option></select><span class="field-hint">Nativní fotoaparát telefonu a ruční Pack_ID zůstávají dostupné bez ohledu na tuto volbu.</span></div><div class="form-actions"><button class="btn btn-primary" type="submit">Uložit nastavení</button></div></form></section>' +
+      '<section class="card" style="margin-top:16px"><div class="card-head"><span class="card-title">Kontrola oprávnění</span></div><div class="card-body"><p><b>Google účet:</b> ' + esc(boot.actor.email) + '</p><p><b>Role:</b> ' + esc(boot.actor.role) + '</p><p class="subtext">Uživatelé a role se spravují výhradně v listu DB_UZIVATELE. Přihlášení v prohlížeči roli nezvyšuje.</p></div></section>' + usersPanel);
+    const f=document.getElementById('settings-form');
+    if(f){f.elements.format.value=boot.qr.labelFormat;f.elements.camera.value=boot.qr.cameraScannerEnabled?'TRUE':'FALSE';f.elements.url.value='';}
+  }
+
+  function canRole(roles) { return roles.indexOf(boot.actor.role) >= 0; }
+  function refreshWorkspace() { return callApi('apiBootstrap').then(function(next){ boot=next; renderShell(); }); }
+  function currentDateInput() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+  function productOptions() {
+    return boot.products.filter(function(p){return p.Active;}).map(function(p){return '<option value="' + esc(p.Produkt_ID) + '" data-input-type="' + esc(p.Typ_Vstupu) + '" data-form="' + esc(p.Forma_Vystupu) + '">' + esc(p.Nazev_Produktu) + ' · ' + esc(p.Produkt_ID) + '</option>';}).join('');
+  }
+  function recipeOptions() {
+    return boot.recipes.filter(function(r){return r.Aktivni===true || String(r.Aktivni).toUpperCase()==='TRUE';}).map(function(r){return '<option value="' + esc(r.Receptura_ID) + '">' + esc(r.Nazev_Receptury) + ' · v' + esc(r.Verze) + ' · ' + esc(r.Receptura_ID) + '</option>';}).join('');
+  }
+  function positionOptions(selected) {
+    return boot.positions.map(function(p){return '<option value="' + esc(p.position) + '" ' + (p.position===selected?'selected':'') + '>' + esc(p.position) + '</option>';}).join('');
+  }
+  function materialStockOptions(type) {
+    return boot.materialStocks.filter(function(s){return Number(s.Mnozstvi_Aktualni)>0 && (!type || type==='any' || s.Material_Type===type);}).map(function(s){
+      return '<option value="' + esc(s.Stock_Material_ID) + '">' + esc(s.Material_Name) + ' · ' + esc(s.Stock_Material_ID) + ' · ' + esc(number(s.Mnozstvi_Aktualni)) + ' ' + esc(s.Jednotka) + '</option>';
+    }).join('');
+  }
+  function productionOperationLabel(type) {
+    return ({NAVAZENI:'Navážení',MICHANI:'Míchání',KAPSLOVANI:'Kapslování',KONTROLA:'Kontrola'})[type] || type;
+  }
+  function renderProduction() {
+    const plans=boot.productionPlans||[];
+    const newPlanForm = canRole(['ADMIN','VEDOUCI','VYROBA']) ?
+      '<section class="card" style="margin-bottom:18px"><div class="card-head"><span class="card-title">Nový výrobní plán</span><span class="tag">Bez pohybu skladu</span></div><form id="production-plan-form" class="card-body"><div class="field-grid">' +
+      '<div class="field"><label for="prod-product">Produkt *</label><select class="input" id="prod-product" name="productId" required>' + productOptions() + '</select></div>' +
+      '<div class="field"><label for="prod-recipe">Receptura a verze (pro recepturový produkt)</label><select class="input" id="prod-recipe" name="recipeId"><option value="">Vyberte verzi receptury</option>' + recipeOptions() + '</select></div>' +
+      '<div class="field"><label for="prod-lot">Výrobní lot *</label><input class="input" name="lot" required maxlength="100" placeholder="Např. VY-261015-A"></div>' +
+      '<div class="field"><label for="prod-date">Datum plánu *</label><input class="input" id="prod-date" type="date" name="date" required value="' + currentDateInput() + '"></div>' +
+      '<div class="field"><label for="prod-priority">Priorita</label><select class="input" name="priority"><option value="NORMALNI">Normální</option><option value="NIZKA">Nízká</option><option value="VYSOKA">Vysoká</option><option value="KRITICKA">Kritická</option></select></div>' +
+      '<div class="field"><label for="prod-capsules">Plánovaný počet kapslí (jen kapsle)</label><input class="input" id="prod-capsules" name="plannedCapsules" type="number" min="1" step="1" placeholder="Např. 12000"></div>' +
+      '<div class="field" style="grid-column:1/-1"><label for="prod-note">Poznámka</label><input class="input" id="prod-note" name="note" maxlength="500" placeholder="Volitelné provozní poznámky"></div></div><div class="form-actions"><button class="btn btn-primary" type="submit" ' + (!boot.products.some(function(p){return p.Active;})?'disabled':'') + '>Založit plán</button></div><p class="field-hint">Vytvoření plánu neotevírá packy. Pack se nejprve přiřadí a jeho skutečné použití se potvrzuje samostatně z detailu packu.</p></form></section>' : '';
+    const cards=plans.map(function(p){
+      const ops=(p.Operations||[]).slice().sort(function(a,b){return Number(a.Poradi)-Number(b.Poradi);});
+      const activeOp=ops.find(function(o){return o.Stav==='PROBIHA';});
+      const nextOp=ops.find(function(o){return o.Stav==='NAPLANOVANO'||o.Stav==='POZASTAVENO';});
+      let actions='';
+      if(canRole(['ADMIN','VEDOUCI','VYROBA'])){
+        if(p.Stav==='NAPLANOVANO')actions+='<button class="btn btn-small btn-primary" data-action="plan-status" data-plan-id="' + esc(p.Plan_Vyroby_ID) + '" data-status="PRIPRAVENO">Připravit plán</button>';
+        if(p.Stav==='PRIPRAVENO')actions+='<button class="btn btn-small btn-primary" data-action="plan-status" data-plan-id="' + esc(p.Plan_Vyroby_ID) + '" data-status="PROBIHA">Zahájit výrobu</button>';
+        if(p.Stav==='POZASTAVENO')actions+='<button class="btn btn-small btn-primary" data-action="plan-status" data-plan-id="' + esc(p.Plan_Vyroby_ID) + '" data-status="PROBIHA">Pokračovat</button>';
+        if(p.Stav==='PROBIHA'&&!activeOp&&nextOp)actions+='<button class="btn btn-small btn-primary" data-action="plan-status" data-plan-id="' + esc(p.Plan_Vyroby_ID) + '" data-status="PROBIHA">Spustit další operaci</button>';
+        if(p.Stav==='PROBIHA'&&activeOp)actions+='<button class="btn btn-small" data-action="complete-operation" data-plan-id="' + esc(p.Plan_Vyroby_ID) + '" data-operation-id="' + esc(activeOp.Operace_ID) + '" data-type="' + esc(activeOp.Typ_Operace) + '">Dokončit: ' + esc(productionOperationLabel(activeOp.Typ_Operace)) + '</button><button class="btn btn-small" data-action="plan-status" data-plan-id="' + esc(p.Plan_Vyroby_ID) + '" data-status="POZASTAVENO">Pozastavit</button>';
+        if(p.Stav==='PROBIHA'&&ops.length&&ops.every(function(o){return o.Stav==='DOKONCENO';}))actions+='<form class="inline-finish" data-plan-id="' + esc(p.Plan_Vyroby_ID) + '"><div class="field-grid"><div class="field"><label>Box hotového polotovaru</label><input class="input" name="box" required value="VYROBA"></div><div class="field"><label>Pozice</label><select class="input" name="position">' + positionOptions('A1') + '</select></div>' + (p.Planovany_Pocet_Kapsli!==''&&p.Planovany_Pocet_Kapsli!=null?'<div class="field"><label>Potvrzené kapsle</label><input class="input" name="actualCapsules" readonly value="' + esc(p.Skutecny_Pocet_Kapsli||'') + '"></div>':'') + '</div><button class="btn btn-primary btn-small" type="submit">Dokončit plán a vytvořit polotovar</button></form>';
+      }
+      const opList=ops.map(function(o){const done=o.Stav==='DOKONCENO';return '<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)"><span class="tag ' + (done?'tag-good':o.Stav==='PROBIHA'?'tag-open':'tag-new') + '">' + esc(o.Poradi) + '</span><div style="flex:1"><strong>' + esc(productionOperationLabel(o.Typ_Operace)) + '</strong><div class="subtext">' + esc(date(o.Skutecny_Zacatek)) + (o.Skutecny_Konec?' – '+esc(date(o.Skutecny_Konec)):'') + '</div></div>' + status(o.Stav) + '</div>';}).join('');
+      return '<article class="card"><div class="card-head"><div><div class="card-title">' + esc(p.Product_Name) + '</div><div class="subtext">' + esc(p.Plan_Vyroby_ID) + ' · lot ' + esc(p.Vyrobni_Lot) + '</div></div>' + status(p.Stav) + '</div><div class="card-body"><div class="field-grid"><div class="detail-field"><span>Datum plánu</span><strong>' + esc(p.Datum_Planu) + '</strong></div><div class="detail-field"><span>Vstup</span><strong>' + esc(p.Vstupni_Typ==='RECEPTURA'?'Receptura '+p.Receptura_ID:'Jedna surovina') + '</strong></div><div class="detail-field"><span>Packy přiřazené / použité</span><strong>' + esc((p.Packs||[]).length) + ' / ' + esc((p.Packs||[]).filter(function(x){return x.Stav_Pouziti==='POUZITO';}).length) + '</strong></div><div class="detail-field"><span>Kapsle</span><strong>' + esc(p.Skutecny_Pocet_Kapsli||p.Planovany_Pocet_Kapsli||'—') + '</strong></div></div><div style="margin-top:15px"><div class="eyebrow">POSTUP OPERACÍ</div>' + opList + '</div><div class="actions" style="margin-top:16px">' + actions + '</div></div></article>';
+    }).join('');
+    setPageContent(pageHead('VÝROBNÍ PROCES', 'Výroba', 'Plánování neotevírá packy. Každá operace se potvrzuje postupně; kapslování eviduje počet kusů, ne hmotnost.', '') +
+      newPlanForm + '<div class="grid">' + (cards||'<section class="card"><div class="empty"><strong>Zatím nejsou žádné výrobní plány</strong>Vytvořte plán podle produktu a jeho vstupní cesty.</div></section>') + '</div>');
+  }
+
+  function renderRecipes() {
+    const allowed=canRole(['ADMIN','VEDOUCI']);
+    const form=allowed?'<section class="card" style="margin-bottom:18px"><div class="card-head"><span class="card-title">Nová receptura / neměnná verze</span></div><form id="recipe-form" class="card-body"><div class="field-grid"><div class="field"><label>Název receptury *</label><input class="input" name="name" required maxlength="200"></div><div class="field"><label>Forma výstupu *</label><select class="input" name="outputForm"><option value="SYPKA">Sypká směs</option><option value="KAPSLE">Kapsle</option></select></div><div class="field" style="grid-column:1/-1"><label>Suroviny *</label><select class="input" name="ingredientIds" multiple required size="6">' + boot.suroviny.map(function(s){return '<option value="' + esc(s.id) + '">' + esc(s.name) + ' · ' + esc(s.id) + '</option>';}).join('') + '</select><span class="field-hint">Použijte Ctrl / ⌘ pro výběr více surovin. Poměr ani navážka se v tomto systému neevidují.</span></div><div class="field" style="grid-column:1/-1"><label>Poznámka</label><input class="input" name="note" maxlength="500"></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">Uložit novou verzi</button></div></form></section>':'';
+    const recipes=(boot.recipes||[]).map(function(r){return '<article class="card"><div class="card-head"><div><div class="card-title">' + esc(r.Nazev_Receptury) + ' · verze ' + esc(r.Verze) + '</div><div class="subtext">' + esc(r.Receptura_ID) + '</div></div><span class="tag">' + esc(r.Forma_Vystupu==='KAPSLE'?'Kapsle':'Sypká směs') + '</span></div><div class="card-body"><div class="eyebrow">SLOŽENÍ · ' + esc((r.ingredients||[]).length) + ' SUROVIN</div><div class="actions" style="margin-top:10px">' + (r.ingredients||[]).map(function(i){return '<span class="tag">' + esc(i.name) + '</span>';}).join('') + '</div><p class="subtext" style="margin-top:12px">Verze se nepřepisuje. Změnu složení založte jako novou verzi.</p></div></article>';}).join('');
+    setPageContent(pageHead('KMENOVÁ DATA', 'Receptury', 'Verzované složení pro míchání a následnou výrobu. Bez hmotnostní bilance a navážek.', '') + form + '<div class="grid">' + (recipes||'<section class="card"><div class="empty"><strong>Žádné receptury</strong>Nejprve vytvořte suroviny ve správě kmenových dat.</div></section>') + '</div>');
+  }
+
+  function renderMaterials() {
+    const admin=canRole(['ADMIN','VEDOUCI']);
+    const surovinForm=admin?'<section class="card"><div class="card-head"><span class="card-title">Nová surovina</span></div><form id="ingredient-form" class="card-body"><div class="field"><label>Název suroviny *</label><input class="input" name="name" required maxlength="200" placeholder="Např. Hořčík bisglycinát"></div><div class="form-actions"><button class="btn btn-primary" type="submit">Přidat surovinu</button></div></form></section>':'';
+    const productForm=admin?'<section class="card"><div class="card-head"><span class="card-title">Nový produkt</span></div><form id="product-form" class="card-body"><div class="field-grid"><div class="field"><label>Název produktu *</label><input class="input" name="name" required maxlength="200"></div><div class="field"><label>Forma výstupu *</label><select class="input" name="form"><option value="SYPKA">Sypká</option><option value="KAPSLE">Kapsle</option></select></div><div class="field"><label>Typ vstupu *</label><select class="input" name="inputType"><option value="JEDNA_SUROVINA">Jedna surovina</option><option value="RECEPTURA">Receptura</option></select></div><div class="field"><label>Kapslí na balení (pro kapsle)</label><input class="input" name="capsulesPerPackage" type="number" min="1" step="1"></div><label style="display:flex;align-items:center;gap:9px"><input type="checkbox" name="labelRequired"> Etiketa je povinná</label></div><div class="form-actions"><button class="btn btn-primary" type="submit">Přidat produkt</button></div></form></section>':'';
+    const materialForm=admin?'<section class="card"><div class="card-head"><span class="card-title">Nový obalový materiál</span></div><form id="material-form" class="card-body"><div class="field-grid"><div class="field"><label>Název materiálu *</label><input class="input" name="name" required maxlength="200" placeholder="Doypack 250 g"></div><div class="field"><label>Typ *</label><select class="input" name="type"><option>DOYPACK</option><option>PYTLIK</option><option>LAHEV</option><option>VICKO</option><option>KRABICKA</option><option>ETIKETA</option><option>JINY</option></select></div><div class="field"><label>Jednotka *</label><select class="input" name="unit"><option value="ks">ks</option><option value="role">role</option><option value="bal">bal</option></select></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">Přidat materiál</button></div></form></section>':'';
+    const stockForm=admin?'<section class="card"><div class="card-head"><span class="card-title">Příjem obalového materiálu</span></div><form id="material-stock-form" class="card-body"><div class="field-grid"><div class="field"><label>Materiál *</label><select class="input" name="materialId" required>' + boot.materials.filter(function(m){return m.Active;}).map(function(m){return '<option value="' + esc(m.Material_ID) + '">' + esc(m.Nazev_Materialu) + ' · ' + esc(m.Material_ID) + '</option>';}).join('') + '</select></div><div class="field"><label>Lot *</label><input class="input" name="lot" required></div><div class="field"><label>Množství *</label><input class="input" type="number" min="0.000001" step="any" name="quantity" required></div><div class="field"><label>Box_Number *</label><input class="input" name="box" required value="OBALY"></div><div class="field"><label>Pozice *</label><select class="input" name="position">' + positionOptions('A1') + '</select></div></div><div class="form-actions"><button class="btn btn-primary" type="submit" ' + (!boot.materials.some(function(m){return m.Active;})?'disabled':'') + '>Přijmout materiál</button></div></form></section>':'';
+    const surovinList='<section class="card"><div class="card-head"><span class="card-title">Suroviny</span><span class="tag">' + boot.suroviny.length + '</span></div><div class="card-body">' + (boot.suroviny.length?'<div class="grid">' + boot.suroviny.map(function(s){return '<div class="detail-field"><strong>' + esc(s.name) + '</strong><div class="subtext">' + esc(s.id) + '</div></div>';}).join('') + '</div>':'<div class="empty">Zatím nejsou založené suroviny.</div>') + '</div></section>';
+    const productList='<section class="card"><div class="card-head"><span class="card-title">Produkty</span><span class="tag">' + boot.products.length + '</span></div><div class="card-body">' + (boot.products.length?'<div class="table-wrap"><table class="table"><thead><tr><th>Produkt</th><th>Forma</th><th>Vstup</th><th>Etiketa</th></tr></thead><tbody>' + boot.products.map(function(p){return '<tr><td><strong>' + esc(p.Nazev_Produktu) + '</strong><div class="subtext">' + esc(p.Produkt_ID) + '</div></td><td>' + esc(p.Forma_Vystupu) + '</td><td>' + esc(p.Typ_Vstupu) + '</td><td>' + esc(p.Label_Required?'Povinná':'Volitelná') + '</td></tr>';}).join('') + '</tbody></table></div>':'<div class="empty">Zatím nejsou založené produkty.</div>') + '</div></section>';
+    const materialList='<section class="card"><div class="card-head"><span class="card-title">Sklad obalového materiálu</span><span class="tag">' + boot.materialStocks.length + ' položek</span></div><div class="card-body flush">' + (boot.materialStocks.length?'<div class="table-wrap"><table class="table"><thead><tr><th>Materiál</th><th>Typ</th><th>Množství</th><th>Umístění</th><th>Lot</th></tr></thead><tbody>' + boot.materialStocks.map(function(s){return '<tr><td><strong>' + esc(s.Material_Name) + '</strong><div class="subtext">' + esc(s.Stock_Material_ID) + '</div></td><td>' + esc(s.Material_Type) + '</td><td>' + esc(number(s.Mnozstvi_Aktualni)) + ' ' + esc(s.Jednotka) + '</td><td>' + esc(s.Box_Number) + ' / ' + esc(s.Pozice) + '</td><td>' + esc(s.Lot) + '</td></tr>';}).join('') + '</tbody></table></div>':'<div class="empty">Zatím nejsou zapsané skladové zásoby obalů.</div>') + '</div></section>';
+    setPageContent(pageHead('KMENOVÁ DATA A MATERIÁLY', 'Suroviny, produkty a obaly', 'Přístup k zápisu je omezen na ADMIN a VEDOUCI. Všechny zápisy probíhají přes Apps Script a audit.', '') +
+      (admin?'<div class="grid grid-two" style="margin-bottom:18px">' + surovinForm + productForm + materialForm + stockForm + '</div>':'<div class="notice">Zobrazení je pouze pro čtení. Správu kmenových dat provádí ADMIN nebo VEDOUCI.</div>') +
+      '<div class="grid grid-two">' + surovinList + productList + materialList + '</div>');
+  }
+
+  function materialLineEditor(id, labelType) {
+    return '<div class="material-line field-grid" style="margin-top:10px"><div class="field"><label>Obalový materiál / etiketa</label><select class="input" name="stockId" required>' + materialStockOptions(labelType) + '</select></div><div class="field"><label>Plánovaná spotřeba</label><input class="input" name="plannedQuantity" type="number" min="0.000001" step="any" required placeholder="Počet kusů / jednotek"></div></div>';
+  }
+
+  function renderPackaging() {
+    const plans=boot.packagingPlans||[];
+    const sourceOptions='<option value="PACK_SUROVINA">Raw pack (přímé plnění)</option><option value="POLOTOVAR">Polotovar</option>';
+    const create=canRole(['ADMIN','VEDOUCI','VYROBA'])?'<section class="card" style="margin-bottom:18px"><div class="card-head"><span class="card-title">Nový plán balení</span><span class="tag">Zdroj + obaly</span></div><form id="packaging-plan-form" class="card-body"><div class="field-grid"><div class="field"><label>Produkt *</label><select class="input" name="productId" required>' + productOptions() + '</select></div><div class="field"><label>Zdroj *</label><select class="input" name="sourceType">' + sourceOptions + '</select></div><div class="field"><label>Pack_ID nebo Polotovar_ID *</label><input class="input" name="sourceId" required placeholder="P-26-000123 / PO-26-000001"></div><div class="field"><label>Plánovaný počet balení *</label><input class="input" name="plannedCount" type="number" min="1" step="1" required></div><div class="field"><label>Výstupní box *</label><input class="input" name="box" required value="HOTOVE"></div><div class="field"><label>Výstupní pozice *</label><select class="input" name="position">' + positionOptions('A1') + '</select></div></div><div style="margin-top:18px"><div class="card-title">Obalový materiál</div><div id="pack-material-lines">' + materialLineEditor('pack-material-1') + '</div><button type="button" class="btn btn-small" data-action="add-material-line" data-container="pack-material-lines" data-type="any">＋ Přidat další materiál</button></div><div class="form-actions"><button class="btn btn-primary" type="submit" ' + (!boot.materialStocks.some(function(s){return Number(s.Mnozstvi_Aktualni)>0;})?'disabled':'') + '>Založit plán balení</button></div></form></section>':'';
+    const list=plans.map(function(p){
+      const actions=canRole(['ADMIN','VEDOUCI','VYROBA'])?(
+        p.Stav==='NAPLANOVANO'?'<button class="btn btn-small btn-primary" data-action="packaging-status" data-plan-id="' + esc(p.Plan_Baleni_ID) + '" data-status="PRIPRAVENO">Připravit</button>':
+        p.Stav==='PRIPRAVENO'?'<button class="btn btn-small btn-primary" data-action="packaging-status" data-plan-id="' + esc(p.Plan_Baleni_ID) + '" data-status="PROBIHA">Zahájit balení</button>':
+        p.Stav==='POZASTAVENO'?'<button class="btn btn-small btn-primary" data-action="packaging-status" data-plan-id="' + esc(p.Plan_Baleni_ID) + '" data-status="PROBIHA">Pokračovat</button>':
+        p.Stav==='PROBIHA'?'<form class="packaging-complete-form" data-plan-id="' + esc(p.Plan_Baleni_ID) + '" style="margin-top:12px"><div class="field-grid"><div class="field"><label>Skutečný počet balení</label><input class="input" name="actualCount" type="number" min="1" max="' + esc(p.Planovany_Pocet_Baleni) + '" value="' + esc(p.Planovany_Pocet_Baleni) + '" required></div><div class="field"><label>Hotový box</label><input class="input" name="box" value="HOTOVE" required></div><div class="field"><label>Pozice</label><select class="input" name="position">' + positionOptions('A1') + '</select></div></div><div class="eyebrow" style="margin-top:12px">SKUTEČNÁ SPOTŘEBA OBALŮ</div>' + (p.Materials||[]).map(function(m){return '<div class="field-grid" style="margin-top:8px"><div class="field"><label>' + esc(m.Material_Name) + ' · ' + esc(m.Stock_Material_ID) + '</label><div class="subtext">Dostupné: ' + esc(number(m.Available)) + ' ' + esc(m.Jednotka) + '</div></div><div class="field"><label>Skutečně spotřebováno</label><input class="input" data-line-id="' + esc(m.Plan_Baleni_Polozka_ID) + '" name="materialQuantity" type="number" min="0" step="any" value="' + esc(m.Mnozstvi_Plan) + '" required></div></div>';}).join('') + '<div class="form-actions"><button class="btn btn-primary btn-small" type="submit">Dokončit balení</button></div></form>':''
+      ):'';
+      return '<article class="card"><div class="card-head"><div><div class="card-title">' + esc(p.Product_Name) + '</div><div class="subtext">' + esc(p.Plan_Baleni_ID) + ' · lot ' + esc(p.Vyrobni_Lot) + '</div></div>' + status(p.Stav) + '</div><div class="card-body"><div class="field-grid"><div class="detail-field"><span>Zdroj</span><strong>' + esc(p.Zdroj_Typ) + ' · ' + esc(p.Zdroj_ID) + '</strong></div><div class="detail-field"><span>Plán / skutečnost</span><strong>' + esc(p.Planovany_Pocet_Baleni) + ' / ' + esc(p.Skutecny_Pocet_Baleni||'—') + ' balení</strong></div></div><div class="subtext" style="margin-top:10px">Materiály: ' + esc((p.Materials||[]).length) + ' · při dokončení se odečte skutečná kusová spotřeba.</div><div class="actions" style="margin-top:12px">' + actions + '</div></div></article>';
+    }).join('');
+    setPageContent(pageHead('BALENÍ A OBALY', 'Balení', 'Spotřeba se odečítá až při potvrzení. Nedostatek kteréhokoli materiálu blokuje dokončení.', '') + create + '<div class="grid">' + (list||'<section class="card"><div class="empty"><strong>Žádné plány balení</strong>Založte plán pro raw pack nebo evidovaný polotovar.</div></section>') + '</div>');
+  }
+
+  function renderSemiFinished() {
+    const rows=(boot.semiFinished||[]).map(function(item){
+      const kind=item.Typ_Polotovaru==='SYPKA_SMES'?'Sypká směs':'Nezabalené kapsle';
+      const consumed=item.Stav_Polotovaru==='SPOTREBOVANY';
+      const actions=item.Typ_Polotovaru==='SYPKA_SMES'&&!consumed&&canRole(['ADMIN','VEDOUCI','VYROBA'])?'<button class="btn btn-small btn-danger" data-action="consume-semi-finished" data-id="'+esc(item.Polotovar_ID)+'">Potvrdit spotřebování</button>':'';
+      const amount=item.Typ_Polotovaru==='KAPSLE_NEZABALENE'?number(item.Pocet_Kapsli_Aktualne)+' ks':'Nesleduje se hmotnost';
+      return '<tr><td class="code">'+esc(item.Polotovar_ID)+'</td><td><strong>'+esc(item.Product_Name)+'</strong><div class="subtext">'+esc(item.Plan_Vyroby_ID)+'</div></td><td>'+esc(kind)+'</td><td>'+status(item.Stav_Polotovaru)+'</td><td>'+esc(amount)+'</td><td>'+esc(item.Box_Number)+' / '+esc(item.Pozice)+'</td><td>'+actions+'</td></tr>';
+    }).join('');
+    setPageContent(pageHead('VÝSTUP VÝROBY','Polotovary','Sypká směs nemá evidovanou zbytkovou hmotnost. Její spotřebování potvrzuje obsluha samostatnou akcí; nezabalené kapsle se sledují kusově.','')+
+      '<section class="card"><div class="table-wrap">'+(rows?'<table class="table"><thead><tr><th>Polotovar ID</th><th>Produkt / plán</th><th>Typ</th><th>Stav</th><th>Množství</th><th>Umístění</th><th>Akce</th></tr></thead><tbody>'+rows+'</tbody></table>':'<div class="empty"><strong>Zatím nejsou žádné polotovary</strong>Po dokončení výrobního plánu se sem zapíše sypká směs nebo nezabalené kapsle.</div>')+'</div></section>');
+  }
+
+  function renderFinished() {
+    const list=(boot.finishedStock||[]).map(function(s){
+      const actions=s.Stav_Zpracovani==='CEKA_ETYKETU'&&canRole(['ADMIN','VEDOUCI','VYROBA'])?'<button class="btn btn-small btn-primary" data-action="navigate" data-route="/labeling">Etiketovat</button>':s.Stav_Zpracovani==='PRIPRAVENO_K_PREDANI'&&canRole(['ADMIN','VEDOUCI'])?'<button class="btn btn-small btn-primary" data-action="navigate" data-route="/handover">Předat expedici</button>':'';
+      const label=s.Stav_Zpracovani==='CEKA_ETYKETU'?'Čeká na etiketu':s.Stav_Zpracovani==='PRIPRAVENO_K_PREDANI'?'Připraveno k předání':'Předáno expedici';
+      return '<tr><td><strong>' + esc(s.Product_Name) + '</strong><div class="subtext">' + esc(s.Produkt_ID) + '</div></td><td class="code">' + esc(s.Hotovy_Stock_ID) + '</td><td>' + esc(s.Vyrobni_Lot) + '</td><td><strong>' + esc(number(s.Pocet_Baleni_Aktualne)) + '</strong> bal.</td><td>' + status(s.Stav_Zpracovani) + '<div class="subtext">' + esc(label) + '</div></td><td>' + esc(s.Box_Number) + ' / ' + esc(s.Pozice) + '</td><td>' + actions + '</td></tr>';
+    }).join('');
+    setPageContent(pageHead('HOTOVÝ VÝROBEK', 'Sklad hotových výrobků', 'Oddělené skladové řádky jednoznačně vyjadřují, které kusy čekají na etiketu, jsou připravené k předání nebo už byly předány.', '<button class="btn btn-primary" data-action="navigate" data-route="/handover">Předat expedici →</button>') +
+      '<section class="card"><div class="table-wrap">' + (list?'<table class="table"><thead><tr><th>Produkt</th><th>Stock ID</th><th>Výrobní lot</th><th>Množství</th><th>Stav</th><th>Umístění</th><th>Akce</th></tr></thead><tbody>' + list + '</tbody></table>':'<div class="empty"><strong>Hotové výrobky zatím nejsou</strong>Po dokončení balení se vytvoří skladový řádek.</div>') + '</div></section>');
+  }
+
+  function renderLabeling() {
+    const wait=(boot.finishedStock||[]).filter(function(s){return s.Stav_Zpracovani==='CEKA_ETYKETU';});
+    const labelStocks=boot.materialStocks.filter(function(s){return s.Material_Type==='ETIKETA'&&Number(s.Mnozstvi_Aktualni)>0;});
+    const create=canRole(['ADMIN','VEDOUCI','VYROBA'])?'<section class="card" style="margin-bottom:18px"><div class="card-head"><span class="card-title">Nový plán etiketování</span></div><form id="labeling-plan-form" class="card-body"><div class="field-grid"><div class="field"><label>Hotová skladová položka *</label><select class="input" name="hotStockId" required>' + wait.map(function(s){return '<option value="' + esc(s.Hotovy_Stock_ID) + '">' + esc(s.Product_Name) + ' · ' + esc(s.Vyrobni_Lot) + ' · ' + esc(s.Hotovy_Stock_ID) + ' · ' + esc(s.Pocet_Baleni_Aktualne) + ' bal.</option>';}).join('') + '</select></div><div class="field"><label>Počet balení k etiketování *</label><input class="input" name="quantity" type="number" min="1" step="1" required></div><div class="field"><label>Skladová položka etiket *</label><select class="input" name="stockId" required>' + labelStocks.map(function(s){return '<option value="' + esc(s.Stock_Material_ID) + '">' + esc(s.Material_Name) + ' · ' + esc(s.Stock_Material_ID) + ' · ' + esc(s.Mnozstvi_Aktualni) + ' ' + esc(s.Jednotka) + '</option>';}).join('') + '</select></div><div class="field"><label>Plánovaný počet etiket *</label><input class="input" name="plannedQuantity" type="number" min="1" step="1" required></div></div><div class="form-actions"><button class="btn btn-primary" type="submit" ' + (!wait.length||!labelStocks.length?'disabled':'') + '>Založit plán etiketování</button></div><p class="field-hint">Při částečném etiketování se zásoba rozdělí do oddělených řádků.</p></form></section>':'';
+    const plans=(boot.labelingPlans||[]).map(function(p){
+      let actions='';
+      if(canRole(['ADMIN','VEDOUCI','VYROBA'])){
+        if(p.Stav==='NAPLANOVANO')actions='<button class="btn btn-small btn-primary" data-action="labeling-status" data-plan-id="' + esc(p.Plan_Etiketovani_ID) + '" data-status="PRIPRAVENO">Připravit</button>';
+        else if(p.Stav==='PRIPRAVENO')actions='<button class="btn btn-small btn-primary" data-action="labeling-status" data-plan-id="' + esc(p.Plan_Etiketovani_ID) + '" data-status="PROBIHA">Zahájit etiketování</button>';
+        else if(p.Stav==='PROBIHA')actions='<form class="labeling-complete-form" data-plan-id="' + esc(p.Plan_Etiketovani_ID) + '" style="margin-top:12px"><div class="field-grid"><div class="field"><label>Skutečně etiketováno (balení)</label><input class="input" name="actualCount" type="number" min="1" max="' + esc(p.Pocet_Kusu_Plan) + '" value="' + esc(p.Pocet_Kusu_Plan) + '" required></div>' + (p.Materials||[]).map(function(m){return '<div class="field"><label>Spotřebované etikety · ' + esc(m.Stock_Material_ID) + '</label><input class="input" name="materialQuantity" data-line-id="' + esc(m.Plan_Etiketovani_Polozka_ID) + '" type="number" min="0" step="any" value="' + esc(m.Mnozstvi_Plan) + '" required></div>';}).join('') + '</div><div class="form-actions"><button class="btn btn-primary btn-small" type="submit">Dokončit etiketování</button></div></form>';
+      }
+      return '<article class="card"><div class="card-head"><div><div class="card-title">' + esc(p.Product_Name) + '</div><div class="subtext">' + esc(p.Plan_Etiketovani_ID) + ' · lot ' + esc(p.Vyrobni_Lot) + '</div></div>' + status(p.Stav) + '</div><div class="card-body"><div class="field-grid"><div class="detail-field"><span>Zdrojová zásoba</span><strong>' + esc(p.Hotovy_Stock_ID) + '</strong></div><div class="detail-field"><span>Plán / skutečnost</span><strong>' + esc(p.Pocet_Kusu_Plan) + ' / ' + esc(p.Pocet_Kusu_Skutecnost||'—') + '</strong></div><div class="detail-field"><span>Dostupná zdrojová zásoba</span><strong>' + esc(p.Available) + ' balení</strong></div><div class="detail-field"><span>Spotřeba etiket</span><strong>' + esc((p.Materials||[]).length) + ' položek</strong></div></div><div class="actions" style="margin-top:12px">' + actions + '</div></div></article>';
+    }).join('');
+    setPageContent(pageHead('ETIKETOVÁNÍ', 'Etiketování', 'Povinnou etiketu nelze obejít. Volitelné etikety jsou dostupné stejným evidovaným postupem.', '') + create + '<div class="grid">' + (plans||'<section class="card"><div class="empty"><strong>Žádné plány etiketování</strong>Hotové výrobky s povinnou etiketou se zobrazí výše po dokončení balení.</div></section>') + '</div>');
+  }
+
+  function renderHandover() {
+    const ready=(boot.finishedStock||[]).filter(function(s){return s.Stav_Zpracovani==='PRIPRAVENO_K_PREDANI'&&Number(s.Pocet_Baleni_Aktualne)>0;});
+    const canHandover=canRole(['ADMIN','VEDOUCI']);
+    const form=canHandover?'<section class="card"><div class="card-head"><span class="card-title">Potvrdit předání</span><span class="tag">Poslední interní krok</span></div><form id="handover-form" class="card-body"><div class="field-grid"><div class="field"><label>Převzal *</label><input class="input" name="recipient" required maxlength="200" placeholder="Jméno přebírající osoby"></div><div class="field"><label>Reference expedice (volitelné)</label><input class="input" name="reference" maxlength="160"></div><div class="field" style="grid-column:1/-1"><label>Poznámka</label><input class="input" name="note" maxlength="500"></div></div><div style="margin-top:18px"><div class="card-title">Položky k předání</div>' + (ready.length?'<div class="table-wrap"><table class="table"><thead><tr><th>Vybrat</th><th>Produkt / lot</th><th>Dostupné</th><th>Předat (balení)</th><th>Stock ID</th></tr></thead><tbody>' + ready.map(function(s){return '<tr><td><input aria-label="Vybrat ' + esc(s.Product_Name) + '" type="checkbox" name="handoverSelected" value="' + esc(s.Hotovy_Stock_ID) + '"></td><td><strong>' + esc(s.Product_Name) + '</strong><div class="subtext">' + esc(s.Vyrobni_Lot) + '</div></td><td>' + esc(number(s.Pocet_Baleni_Aktualne)) + '</td><td><input class="input" style="max-width:120px" type="number" name="quantity-' + esc(s.Hotovy_Stock_ID) + '" min="1" max="' + esc(s.Pocet_Baleni_Aktualne) + '" value="' + esc(s.Pocet_Baleni_Aktualne) + '"></td><td class="code">' + esc(s.Hotovy_Stock_ID) + '</td></tr>';}).join('') + '</tbody></table></div>':'<div class="empty">Není žádná zásoba připravená k předání. Výrobek musí mít vyřešené povinné etiketování.</div>') + '</div><div class="form-actions"><button class="btn btn-primary" type="submit" ' + (!ready.length?'disabled':'') + '>Potvrdit předání expedici</button></div><p class="field-hint">Lze předat více produktů a šarží najednou. Částečné množství se oddělí od zbytku a audit se zachová.</p></form></section>':'<div class="notice">Předání expedici může potvrdit pouze ADMIN nebo VEDOUCI.</div>';
+    const handoverRows=(boot.handovers||[]).map(function(h){
+      const summary=(h.Items||[]).map(function(item){return item.Product_Name+' · '+item.Vyrobni_Lot+' · '+item.Pocet_Baleni+' bal.';}).join(' | ');
+      return '<tr><td class="code">'+esc(h.Predani_ID)+'</td><td>'+esc(date(h.Timestamp))+'</td><td><strong>'+esc(h.Prevzal)+'</strong><div class="subtext">Předal: '+esc(h.Predal)+'</div></td><td>'+esc(h.Reference_Expedice||'—')+'</td><td>'+esc(number(h.Item_Count))+' bal.</td><td>'+esc(summary)+'</td></tr>';
+    }).join('');
+    setPageContent(pageHead('EXPEDICE · POSLEDNÍ KROK', 'Předání expedici', 'Potvrzení předání uzavírá interní proces. Doprava ani sledování zásilek do aplikace nepatří.', '') + form +
+      '<section class="card" style="margin-top:18px"><div class="card-head"><span class="card-title">Nedávná předání</span><span class="tag">'+(boot.handovers||[]).length+'</span></div><div class="table-wrap">'+(handoverRows?'<table class="table"><thead><tr><th>Predani_ID</th><th>Čas</th><th>Převzal / předal</th><th>Reference</th><th>Počet</th><th>Položky</th></tr></thead><tbody>'+handoverRows+'</tbody></table>':'<div class="empty">Zatím nebylo potvrzeno žádné předání.</div>')+'</div></section>');
   }
 
   function showPrintLabel(label) {
-    const p = label.pack;
-    const printRoot = document.getElementById('label-print');
-    printRoot.innerHTML = '<div class="label-sheet"><div class="label-qr" id="label-qr"></div><div class="label-info"><div class="label-name">' + esc(label.surovinaName) + '</div><div class="label-lot">LOT ' + esc(p.Lot) + '<br>EXP ' + esc(p.Expirace_MMYY) + '</div><div class="label-id">' + esc(p.Pack_ID) + '</div></div></div>';
-    const target = document.getElementById('label-qr');
+    const p=label.pack;
+    const isLarge=label.format==='60x40mm';
+    const width=isLarge?60:50;
+    const height=isLarge?40:30;
+    const qrSize=isLarge?26:22;
+    const printRoot=document.getElementById('label-print');
+    printRoot.innerHTML='<div class="label-sheet '+(isLarge?'label-large':'label-standard')+'"><div class="label-qr" id="label-qr"></div><div class="label-info"><div class="label-name">'+esc(label.surovinaName)+'</div><div class="label-lot">LOT '+esc(p.Lot)+'<br>EXP '+esc(p.Expirace_MMYY)+'</div><div class="label-id">'+esc(p.Pack_ID)+'</div></div></div>';
+    const styleId='dynamic-label-print-style';
+    let style=document.getElementById(styleId);
+    if(!style){style=document.createElement('style');style.id=styleId;document.head.appendChild(style);}
+    style.textContent='@media print{@page{size:'+width+'mm '+height+'mm;margin:0}.label-print,.label-sheet{width:'+width+'mm!important;height:'+height+'mm!important}.label-qr{width:'+qrSize+'mm!important;height:'+qrSize+'mm!important}.label-qr canvas,.label-qr img{width:100%!important;height:100%!important}}';
+    const target=document.getElementById('label-qr');
     try {
-      new QRCode(target, {text:label.payload,width:260,height:260,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
-    } catch (err) { toast('QR se nepodařilo vykreslit: ' + err.message,'error'); return; }
-    setTimeout(function () { window.print(); }, 350);
+      new QRCode(target,{text:label.payload,width:520,height:520,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+    } catch(err) { toast('QR se nepodařilo vykreslit: '+err.message,'error');return; }
+    setTimeout(function(){window.print();},350);
   }
 
   app.addEventListener('click', async function (event) {
@@ -276,16 +446,88 @@
     const action = button.getAttribute('data-action');
     const id = button.getAttribute('data-id') || '';
     try {
+      if (action === 'clear-user-form') {
+        const form=document.getElementById('user-form');
+        if(form){form.reset();form.elements.email.value='';form.elements.role.value='READONLY';form.elements.active.checked=true;}
+        return;
+      }
+      if (action === 'edit-user') {
+        const user=(boot.users||[]).find(function(item){return item.Email===button.getAttribute('data-email');});
+        const form=document.getElementById('user-form');
+        if(user&&form){form.elements.email.value=user.Email;form.elements.role.value=user.Role;form.elements.active.checked=Boolean(user.Aktivni);form.scrollIntoView({behavior:'smooth',block:'center'});}
+        return;
+      }
       if (action === 'navigate') { setRoute(button.getAttribute('data-route') || '/'); return; }
       if (action === 'detail') { setRoute('/pack/' + encodeURIComponent(id)); return; }
       if (action === 'move') { setRoute('/move/' + encodeURIComponent(id)); return; }
       if (action === 'history-tab') { historyTab = button.getAttribute('data-tab') || 'movements'; await loadHistory(); return; }
       if (action === 'history-filter') { await loadHistory(); return; }
+      if (action === 'add-material-line') {
+        const containerId=button.getAttribute('data-container');
+        const container=document.getElementById(containerId);
+        if(!container)throw new Error('Řádek materiálu nelze přidat.');
+        const kind=button.getAttribute('data-type')||'any';
+        const wrapper=document.createElement('div');
+        wrapper.className='material-line-wrapper';
+        wrapper.innerHTML=materialLineEditor('material-line-'+Date.now(),kind)+'<button type="button" class="btn btn-small btn-danger" data-action="remove-material-line" style="margin-top:6px">Odebrat řádek</button>';
+        container.appendChild(wrapper);
+        return;
+      }
+      if (action === 'remove-material-line') {
+        const wrapper=button.closest('.material-line-wrapper');
+        if(wrapper)wrapper.remove();
+        return;
+      }
+      if (action === 'plan-status') {
+        pending=true; button.disabled=true;
+        const result=await callApi('apiUpdateProductionPlanStatus',button.getAttribute('data-plan-id'),button.getAttribute('data-status'),opKey());
+        toast(result.duplicate?'Změna stavu už byla zpracována.':'Stav výrobního plánu byl změněn.','success');
+        await refreshWorkspace();
+        return;
+      }
+      if (action === 'complete-operation') {
+        const type=button.getAttribute('data-type');
+        let actualCapsules='';
+        if(type==='KAPSLOVANI'){
+          const value=prompt('Zadejte skutečný počet vyrobených kapslí (ks):');
+          if(value===null)return;
+          actualCapsules=String(value).trim();
+          if(!actualCapsules||!Number.isFinite(Number(actualCapsules))||Number(actualCapsules)<=0)throw new Error('Zadejte platný počet kapslí.');
+        }
+        pending=true;button.disabled=true;
+        const result=await callApi('apiCompleteProductionOperation',{planId:button.getAttribute('data-plan-id'),operationId:button.getAttribute('data-operation-id'),actualCapsules:actualCapsules},opKey());
+        toast(result.duplicate?'Dokončení operace už bylo zpracováno.':'Operace '+productionOperationLabel(type)+' byla dokončena.','success');
+        await refreshWorkspace();
+        return;
+      }
+      if (action === 'packaging-status') {
+        pending=true;button.disabled=true;
+        const result=await callApi('apiUpdatePackagingPlanStatus',button.getAttribute('data-plan-id'),button.getAttribute('data-status'),opKey());
+        toast(result.duplicate?'Změna stavu už byla zpracována.':'Stav plánu balení změněn.','success');
+        await refreshWorkspace();
+        return;
+      }
+      if (action === 'labeling-status') {
+        pending=true;button.disabled=true;
+        const result=await callApi('apiUpdateLabelingPlanStatus',button.getAttribute('data-plan-id'),button.getAttribute('data-status'),opKey());
+        toast(result.duplicate?'Změna stavu už byla zpracována.':'Stav etiketování změněn.','success');
+        await refreshWorkspace();
+        return;
+      }
+      if (action === 'consume-semi-finished') {
+        if(!confirm('Potvrzujete, že sypký polotovar '+id+' je fyzicky spotřebovaný? Aplikace neodvozuje zbytek z hmotnosti.'))return;
+        pending=true;button.disabled=true;
+        await callApi('apiConfirmSemiFinishedConsumed',id,opKey());
+        toast('Spotřebování sypké směsi bylo potvrzeno a auditováno.','success');
+        await refreshWorkspace();
+        return;
+      }
       if (action === 'empty-pack') {
         if (!confirm('Potvrzujete, že je pack ' + id + ' fyzicky vyprázdněný? Tuto změnu nelze běžně vrátit.')) return;
         pending = true; button.disabled = true;
         const result = await callApi('apiEmptyPack',id,opKey());
         toast(result.duplicate ? 'Toto potvrzení už bylo zpracováno.' : 'Vyprázdnění potvrzeno a zapsáno do auditu.','success');
+        await refreshWorkspace();
         await renderPackDetail(id);
       }
       if (action === 'print-label' || action === 'reprint-label') {
@@ -300,12 +542,24 @@
 
   app.addEventListener('submit', async function (event) {
     const form = event.target;
-    if (!form || !form.id) return;
+    if (!form) return;
+    const special = ['inline-finish','packaging-complete-form','labeling-complete-form'].some(function(name){return form.classList.contains(name);});
+    if (!form.id && !special) return;
     event.preventDefault();
     if (pending) return;
     const fd = new FormData(form);
-    const val = function(name) { return String(fd.get(name) || '').trim(); };
+    const val = function(name) { return String(fd.get(name) == null ? '' : fd.get(name)).trim(); };
     const button = form.querySelector('button[type="submit"]');
+    const listMaterialRows = function(selector, quantityName, plannedName) {
+      return Array.prototype.slice.call(form.querySelectorAll(selector)).map(function(line) {
+        return {
+          stockId:line.querySelector('[name="stockId"]') ? line.querySelector('[name="stockId"]').value : '',
+          plannedQuantity:line.querySelector('[name="'+(plannedName||'plannedQuantity')+'"]') ? line.querySelector('[name="'+(plannedName||'plannedQuantity')+'"]').value : '',
+          lineId:line.querySelector('[data-line-id]') ? line.querySelector('[data-line-id]').getAttribute('data-line-id') : '',
+          quantity:line.querySelector('[name="'+(quantityName||'materialQuantity')+'"]') ? line.querySelector('[name="'+(quantityName||'materialQuantity')+'"]').value : ''
+        };
+      });
+    };
     try {
       pending = true; if (button) button.disabled = true;
       if (form.id === 'receive-form') {
@@ -329,18 +583,85 @@
         const method = intent === 'plan' ? 'apiPlanPackForProduction' : 'apiMarkPackUsed';
         const result = await callApi(method,id,val('planId'),opKey());
         toast(result.duplicate ? 'Požadavek už byl zpracován.' : (intent === 'plan' ? 'Pack přiřazen do plánu; stav se nezměnil.' : 'Použití packu bylo potvrzeno.'),'success');
-        await renderPackDetail(id);
+        await refreshWorkspace();
       } else if (form.id === 'settings-form') {
-        const url = val('url');
-        const format = val('format');
-        const camera = val('camera');
-        if (url) await callApi('apiUpdateConfig',{key:'APP_BASE_URL',value:url});
-        await callApi('apiUpdateConfig',{key:'QR_LABEL_FORMAT_DEFAULT',value:format});
-        await callApi('apiUpdateConfig',{key:'QR_ENABLE_CAMERA_SCANNER',value:camera});
-        const refreshed = await callApi('apiBootstrap');
-        boot.qr = refreshed.qr;
+        const url = val('url'), format = val('format'), camera = val('camera');
+        if (url) await callApi('apiUpdateConfig',{key:'APP_BASE_URL',value:url},opKey());
+        await callApi('apiUpdateConfig',{key:'QR_LABEL_FORMAT_DEFAULT',value:format},opKey());
+        await callApi('apiUpdateConfig',{key:'QR_ENABLE_CAMERA_SCANNER',value:camera},opKey());
         toast('Nastavení uloženo. Nová URL se použije pro nové QR štítky.','success');
-        renderShell();
+        await refreshWorkspace();
+      } else if (form.id === 'user-form') {
+        await callApi('apiSaveAuthorizedUser',{email:val('email'),role:val('role'),active:form.elements.active.checked},opKey());
+        toast('Uživatelská oprávnění byla uložena.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'ingredient-form') {
+        const result=await callApi('apiCreateSurovina',{name:val('name')},opKey());
+        toast(result.duplicate?'Založení už bylo zpracováno.':'Surovina byla přidána.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'product-form') {
+        const productForm=val('form');
+        const result=await callApi('apiCreateProduct',{name:val('name'),form:productForm,inputType:val('inputType'),capsulesPerPackage:val('capsulesPerPackage'),labelRequired:form.querySelector('[name="labelRequired"]').checked},opKey());
+        toast(result.duplicate?'Založení už bylo zpracováno.':'Produkt byl přidán.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'material-form') {
+        await callApi('apiCreatePackagingMaterial',{name:val('name'),type:val('type'),unit:val('unit')},opKey());
+        toast('Obalový materiál byl přidán.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'material-stock-form') {
+        await callApi('apiReceivePackagingMaterialStock',{materialId:val('materialId'),lot:val('lot'),quantity:val('quantity'),box:val('box'),position:val('position')},opKey());
+        toast('Skladová zásoba obalového materiálu byla přijata.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'recipe-form') {
+        const selected=Array.prototype.slice.call(form.querySelectorAll('[name="ingredientIds"] option:checked')).map(function(option){return option.value;});
+        await callApi('apiCreateRecipeVersion',{baseRecipeId:val('baseRecipeId'),name:val('name'),outputForm:val('outputForm'),ingredientIds:selected,note:val('note')},opKey());
+        toast('Neměnná verze receptury byla vytvořena.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'production-plan-form') {
+        const productSelect=form.querySelector('[name="productId"]');
+        const selectedProduct=productSelect.options[productSelect.selectedIndex];
+        const inputType=selectedProduct ? selectedProduct.getAttribute('data-input-type') : '';
+        const formType=selectedProduct ? selectedProduct.getAttribute('data-form') : '';
+        if(inputType==='RECEPTURA'&&!val('recipeId'))throw new Error('Pro recepturový produkt vyberte verzi receptury.');
+        if(formType==='KAPSLE'&&!val('plannedCapsules'))throw new Error('Pro kapslový produkt zadejte plánovaný počet kapslí.');
+        await callApi('apiCreateProductionPlan',{productId:val('productId'),inputType:inputType,recipeId:val('recipeId'),lot:val('lot'),date:val('date'),priority:val('priority'),plannedCapsules:val('plannedCapsules'),note:val('note')},opKey());
+        toast('Výrobní plán byl založen. Skladové packy nebyly otevřeny.','success');
+        await refreshWorkspace();
+      } else if (form.classList.contains('inline-finish')) {
+        const planId=form.getAttribute('data-plan-id');
+        await callApi('apiCompleteProductionPlan',{planId:planId,box:val('box'),position:val('position'),actualCapsules:val('actualCapsules')},opKey());
+        toast('Výrobní plán dokončen a polotovar byl zaevidován.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'packaging-plan-form') {
+        const lines=Array.prototype.slice.call(form.querySelectorAll('.material-line')).map(function(line){return {stockId:line.querySelector('[name="stockId"]').value,plannedQuantity:line.querySelector('[name="plannedQuantity"]').value};});
+        await callApi('apiCreatePackagingPlan',{productId:val('productId'),sourceType:val('sourceType'),sourceId:val('sourceId'),plannedCount:val('plannedCount'),box:val('box'),position:val('position'),materials:lines,note:val('note')},opKey());
+        toast('Plán balení byl vytvořen. Materiál se odečte až při dokončení.','success');
+        await refreshWorkspace();
+      } else if (form.classList.contains('packaging-complete-form')) {
+        const id=form.getAttribute('data-plan-id');
+        const materials=Array.prototype.slice.call(form.querySelectorAll('[name="materialQuantity"]')).map(function(input){return {lineId:input.getAttribute('data-line-id'),quantity:input.value};});
+        await callApi('apiCompletePackagingPlan',{planId:id,actualCount:val('actualCount'),box:val('box'),position:val('position'),materials:materials},opKey());
+        toast('Balení dokončeno, skutečná spotřeba materiálu odečtena a hotová zásoba vytvořena.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'labeling-plan-form') {
+        const materials=[{stockId:val('stockId'),plannedQuantity:val('plannedQuantity')}];
+        await callApi('apiCreateLabelingPlan',{hotStockId:val('hotStockId'),quantity:val('quantity'),materials:materials},opKey());
+        toast('Plán etiketování byl vytvořen.','success');
+        await refreshWorkspace();
+      } else if (form.classList.contains('labeling-complete-form')) {
+        const id=form.getAttribute('data-plan-id');
+        const materials=Array.prototype.slice.call(form.querySelectorAll('[name="materialQuantity"]')).map(function(input){return {lineId:input.getAttribute('data-line-id'),quantity:input.value};});
+        await callApi('apiCompleteLabelingPlan',{planId:id,actualCount:val('actualCount'),materials:materials},opKey());
+        toast('Etiketování dokončeno. Zásoba byla rozdělena podle skutečného počtu kusů.','success');
+        await refreshWorkspace();
+      } else if (form.id === 'handover-form') {
+        const selected=Array.prototype.slice.call(form.querySelectorAll('[name="handoverSelected"]:checked'));
+        if(!selected.length)throw new Error('Vyberte alespoň jednu položku k předání.');
+        const items=selected.map(function(box){return {stockId:box.value,quantity:val('quantity-'+box.value)};});
+        await callApi('apiCreateHandover',{recipient:val('recipient'),reference:val('reference'),note:val('note'),items:items},opKey());
+        toast('Předání expedici potvrzeno a uloženo do auditu.','success');
+        await refreshWorkspace();
+        setRoute('/finished');
       }
     } catch(err) {
       const message = document.getElementById('receive-message');
@@ -356,6 +677,15 @@
   });
   app.addEventListener('change', function(event) {
     if (currentRoute === '/packs' && event.target && ['pack-status','pack-position'].includes(event.target.id)) loadPackRows();
+    if (event.target && event.target.id === 'recipe-base') {
+      const recipe=(boot.recipes||[]).find(function(item){return item.Receptura_ID===event.target.value;});
+      const name=document.getElementById('recipe-name');
+      const form=document.getElementById('recipe-form');
+      if(name&&form){
+        name.value=recipe?recipe.Nazev_Receptury:'';
+        form.elements.outputForm.value=recipe?recipe.Forma_Vystupu:'SYPKA';
+      }
+    }
   });
   window.addEventListener('hashchange', function() {
     currentRoute = routeFromHash();

@@ -6,7 +6,7 @@ function createHandover_(input,operationKey){
   if(!requested.length)throw appError_('Předání musí obsahovat alespoň jednu položku.','VALIDATION_ERROR');
   const items=requested.map(function(item){
     const stockId=requiredText_(item&&item.stockId,'Hotovy_Stock_ID',120);
-    const quantity=requireNumber_(item&&item.quantity,'Počet balení k předání',1,10000000);
+    const quantity=requireInteger_(item&&item.quantity,'Počet balení k předání',1,10000000);
     return {stockId:stockId,quantity:quantity};
   });
   if(new Set(items.map(function(item){return item.stockId;})).size!==items.length)throw appError_('Každý skladový řádek zadejte v předání pouze jednou.','VALIDATION_ERROR');
@@ -53,4 +53,19 @@ function listFinishedStock_(){
     out.Label_Required=product?boolValue_(product.Etiketa_Povinna):false;
     return out;
   }).sort(function(a,b){return String(b.Updated_At).localeCompare(String(a.Updated_At));});
+}
+
+function listHandovers_(){
+  const entries=records_('PREDANI_EXPEDICI');
+  const items=records_('PREDANI_EXPEDICI_POLOZKY');
+  return entries.map(function(entry){
+    const out=publicRecord_(entry);
+    out.Items=items.filter(function(item){return item.Predani_ID===entry.Predani_ID;}).map(function(item){
+      const row=publicRecord_(item),product=findRecord_('DB_PRODUKTY','Produkt_ID',item.Produkt_ID);
+      row.Product_Name=product?String(product.Nazev_Produktu):String(item.Produkt_ID);
+      return row;
+    });
+    out.Item_Count=out.Items.reduce(function(sum,item){return sum+Number(item.Pocet_Baleni||0);},0);
+    return out;
+  }).sort(function(a,b){return new Date(b.Timestamp).getTime()-new Date(a.Timestamp).getTime();}).slice(0,100);
 }

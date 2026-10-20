@@ -13,7 +13,7 @@ function createProduct_(input, operationKey) {
   const name = requiredText_(input && input.name, 'Název produktu', 200);
   const form = requireEnum_(String(input && input.form || ''), ['SYPKA','KAPSLE'], 'Forma výstupu');
   const inputType = requireEnum_(String(input && input.inputType || ''), ['JEDNA_SUROVINA','RECEPTURA'], 'Typ vstupu');
-  const capsuleCount = form === 'KAPSLE' ? requireNumber_(input && input.capsulesPerPackage, 'Kapslí na balení', 1, 100000) : '';
+  const capsuleCount = form === 'KAPSLE' ? requireInteger_(input && input.capsulesPerPackage, 'Kapslí na balení', 1, 100000) : '';
   const labelRequired = Boolean(input && input.labelRequired);
   return withOperation_('VYTVORENI_PRODUKTU', operationKey, { name:name, form:form, inputType:inputType, capsuleCount:capsuleCount, labelRequired:labelRequired }, function(ctx) {
     if (records_('DB_PRODUKTY').some(function(row) { return String(row.Nazev_Produktu).trim().toLowerCase() === name.toLowerCase() && boolValue_(row.Aktivni); })) throw appError_('Aktivní produkt s tímto názvem už existuje.', 'VALIDATION_ERROR');
@@ -45,6 +45,7 @@ function receivePackagingMaterialStock_(input, operationKey) {
   const qty = requireNumber_(input && input.quantity, 'Množství', 0.000001, 1000000000);
   const material = findRecord_('DB_BALICI_MATERIALY', 'Material_ID', materialId);
   if (!material || !boolValue_(material.Aktivni)) throw appError_('Obalový materiál neexistuje nebo není aktivní.', 'VALIDATION_ERROR');
+  const validatedQty=requireStockQuantity_(qty,'Množství',material.Jednotka,0.000001,1000000000);
   return withOperation_('PRIJEM_BALICIHO_MATERIALU', operationKey, { materialId:materialId, lot:lot, box:box, position:position, quantity:qty }, function(ctx) {
     const id = nextIdLocked_('MATERIAL_STOCK', 'MS');
     const now = new Date();
